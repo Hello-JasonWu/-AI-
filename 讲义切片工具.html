@@ -1,0 +1,2151 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>讲义长图 → 反色 + A4 分页切片</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2b3140;
+    --txt:#e8ecf3; --dim:#9aa6b8; --accent:#4c8dff; --ok:#37c98a; --warn:#ffb648;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:26px 20px 80px}
+  h1{font-size:21px;margin:0 0 6px}
+  .sub{color:var(--dim);margin:0 0 20px;font-size:13px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:16px}
+  .card h2{font-size:14px;margin:0 0 12px;color:var(--dim);font-weight:600;letter-spacing:.04em}
+  #drop{border:2px dashed var(--line);border-radius:12px;padding:30px;text-align:center;color:var(--dim);
+    cursor:pointer;transition:.15s;background:var(--panel)}
+  #drop:hover,#drop.over{border-color:var(--accent);color:var(--txt);background:#1b2030}
+  #drop b{color:var(--accent)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px 18px}
+  label.f{display:block;font-size:12px;color:var(--dim);margin-bottom:5px}
+  select,input[type=text],input[type=number]{width:100%;background:var(--panel2);color:var(--txt);
+    border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:13px}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  .chk{display:flex;align-items:center;gap:8px;font-size:13px;margin:6px 0;cursor:pointer}
+  .chk input{accent-color:var(--accent);width:15px;height:15px}
+  button{background:var(--accent);color:#fff;border:0;border-radius:9px;padding:9px 16px;font-size:14px;
+    cursor:pointer;font-weight:600}
+  button.ghost{background:var(--panel2);color:var(--txt);border:1px solid var(--line);font-weight:500}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .file{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px;background:var(--panel2)}
+  .file .hd{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .file .name{font-weight:600}
+  .tag{font-size:12px;color:var(--dim)}
+  .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .thumb{background:#fff;border-radius:4px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.4);position:relative}
+  .thumb canvas{display:block}
+  .thumb .no{position:absolute;left:3px;top:2px;background:rgba(0,0,0,.55);color:#fff;font-size:10px;
+    padding:1px 4px;border-radius:3px}
+  .prevwrap{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+  .bar{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden;margin-top:10px;border:1px solid var(--line)}
+  .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#4c8dff,#37c98a);transition:width .15s}
+  .status{font-size:13px;color:var(--dim);margin-top:8px;min-height:20px}
+  .tips{font-size:12.5px;color:var(--dim);margin:0;padding-left:18px}
+  .tips li{margin:3px 0}
+  .err{color:#ff8080}
+  /* 预设与高级设置 */
+  .presets{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:4px}
+  .preset{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    padding:7px 13px;border-radius:99px;font-size:13px;font-weight:500;cursor:pointer}
+  .preset:hover{border-color:var(--accent);color:#cfe0ff}
+  .preset.on{background:#12294d;border-color:#3f7fd6;color:#bcd6ff}
+  .q{display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;
+    border-radius:50%;background:#2b3140;color:#9aa6b8;font-size:10px;cursor:help;
+    margin-left:3px;vertical-align:1px}
+  .q:hover{background:var(--accent);color:#fff}
+  details.adv{margin-top:12px;border:1px solid var(--line);border-radius:10px;
+    background:#141821;padding:0 14px}
+  details.adv summary{cursor:pointer;padding:11px 0;font-size:13px;color:var(--dim);
+    list-style:none;user-select:none}
+  details.adv summary::-webkit-details-marker{display:none}
+  details.adv summary:before{content:'▸ ';color:var(--accent)}
+  details.adv[open] summary:before{content:'▾ '}
+  details.adv > .grid{margin-bottom:12px}
+  .fmt{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:13px}
+  .fmt label{display:flex;align-items:center;gap:6px;cursor:pointer}
+  /* 整页拖放覆盖层 */
+  #dropCover{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
+    background:rgba(8,12,20,.82);backdrop-filter:blur(3px);pointer-events:none}
+  #dropCover.show{display:flex}
+  #dropCover .box{border:3px dashed var(--accent);border-radius:20px;padding:46px 64px;
+    text-align:center;font-size:20px;color:#cfe0ff;background:rgba(20,30,50,.6)}
+  /* 大图预览 */
+  #viewer{position:fixed;inset:0;z-index:70;display:none;flex-direction:column;
+    background:rgba(6,8,12,.94)}
+  #viewer.show{display:flex}
+  #viewer .vtop{display:flex;align-items:center;gap:12px;padding:12px 18px;flex-wrap:wrap}
+  #viewer .vtop .title{font-weight:600}
+  #viewer .vtop .sp{flex:1}
+  #viewer .vbody{flex:1;overflow:auto;display:flex;align-items:flex-start;justify-content:center;
+    padding:0 18px 18px}
+  #viewer .vbody.onel-one{align-items:flex-start}
+  #viewer canvas{background:#fff;box-shadow:0 6px 30px rgba(0,0,0,.6);border-radius:4px}
+  #viewer .vfoot{padding:10px 18px;color:var(--dim);font-size:12.5px;text-align:center}
+  /* 缩略图：不打印 / 预览提示 */
+  .thumb .skip{position:absolute;right:2px;top:2px;width:20px;height:20px;border-radius:50%;
+    background:rgba(0,0,0,.62);color:#fff;font-size:13px;line-height:20px;text-align:center;
+    cursor:pointer;opacity:0;transition:.12s;border:0;padding:0}
+  .thumb:hover .skip{opacity:1}
+  .thumb.skipped .skip{opacity:1;background:#c0392b}
+  .thumb.skipped canvas{opacity:.22}
+  .thumb.skipped:after{content:'不打印';position:absolute;inset:auto 0 0 0;background:rgba(192,57,43,.92);
+    color:#fff;font-size:11px;text-align:center;padding:2px 0}
+  .thumb{cursor:zoom-in}
+  /* 拖动时的浮窗 */
+  #dragTip{position:fixed;z-index:80;display:none;background:rgba(12,16,24,.95);
+    border:1px solid #4c8dff;color:#e8ecf3;font-size:12px;padding:5px 9px;border-radius:7px;
+    pointer-events:none;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+  #dragTip.show{display:block}
+  #dragTip b{color:#ffd60a}
+  /* 切分编辑器 */
+  .cutedit{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;margin-top:12px}
+  .strip{position:relative;overflow-y:auto;overflow-x:hidden;border:1px solid var(--line);
+    border-radius:8px;background:#000;flex:0 0 auto}
+  .stripWrap{position:relative}
+  .stripWrap canvas{position:absolute;left:0;top:0;display:block}
+  .stripWrap canvas.base{position:relative}
+  .stripWrap canvas.ov{cursor:ns-resize}
+  .detailcol{flex:1 1 420px;min-width:320px}
+  .detailbox{border:1px solid var(--line);border-radius:8px;background:#000;overflow:hidden;margin-top:8px}
+  .detailbox canvas{display:block;width:100%;cursor:ns-resize}
+  .editbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .editbar button{padding:5px 10px;font-size:12.5px;font-weight:500}
+  .editbar button.hot{background:#3a2a00;border:1px solid #7a5a00;color:#ffd60a}
+  .editinfo{font-size:12.5px;color:var(--dim);margin-top:8px;min-height:34px;line-height:1.5}
+  .editinfo b{color:#ffd60a;font-weight:600}
+  .editinfo .warn{color:#ff9f43}
+  .mini{font-size:12px;padding:4px 8px;border-radius:7px}
+  #dl{margin-top:10px}
+  #dl a{display:inline-block;background:#12301f;border:1px solid #2f7a55;color:#7ef0b4;
+    text-decoration:none;padding:8px 14px;border-radius:9px;font-weight:600;font-size:13.5px}
+  #dl a:hover{background:#17402a}
+  .muted{color:var(--dim);font-size:12.5px}
+  .sep{height:1px;background:var(--line);margin:14px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>讲义长图 → 反色 + A4 分页切片</h1>
+  <p class="sub">把老师上课的整张长图（深色底 / 白底都行）反色成白底黑字，并按 A4 纸比例切成一组短图，最后打包下载到本地用于打印。全部在你的浏览器里本地完成，图片不会上传到任何服务器。</p>
+
+  <div id="drop">
+    <div style="font-size:15px;color:var(--txt)">把长图拖到页面任意位置，或 <b>点击选择文件</b></div>
+    <div style="margin-top:6px">支持 PNG / JPG / WebP，可一次选多张；也可以直接 <b>⌘V 粘贴</b>截图</div>
+    <input type="file" id="picker" accept="image/*" multiple hidden />
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>处理设置</h2>
+    <div class="presets">
+      <button class="preset on" data-preset="rec">推荐（清楚）</button>
+      <button class="preset" data-preset="paper">省纸（字略小）</button>
+      <button class="preset" data-preset="ink">省墨（纯黑白）</button>
+      <button class="preset" data-preset="white">原图白底（不反色）</button>
+      <span class="muted" id="presetHint">一般点「推荐」就够了，下面选项不用动。</span>
+    </div>
+
+    <div class="grid" style="margin-top:14px">
+      <div>
+        <label class="f">颜色处理<span class="q" title="深色底的手写笔记建议用「反色 + 增强灰度」；白底笔记选「原图白底」预设即可。">?</span></label>
+        <select id="mode">
+          <option value="gray" selected>反色 + 增强灰度（推荐）</option>
+          <option value="color">反色（保留原笔迹颜色）</option>
+          <option value="bw">纯黑白（最省墨）</option>
+          <option value="none">不反色、保持原样</option>
+        </select>
+      </div>
+      <div>
+        <label class="f">输出格式<span class="q" title="PDF 可以直接打开打印；ZIP 里是每页一张图片。两个都勾会合并成一个 ZIP 下载。">?</span></label>
+        <div class="fmt">
+          <label><input type="checkbox" id="outpng" checked /> 图片 ZIP（PNG）</label>
+          <label><input type="checkbox" id="outpdf" checked /> PDF</label>
+          <label><input type="checkbox" id="outjpg" /> JPG ZIP</label>
+        </div>
+      </div>
+      <div>
+        <label class="f">四周留白</label>
+        <select id="margin">
+          <option value="0">0（内容顶满，字最大）</option>
+          <option value="5" selected>5 mm（推荐）</option>
+          <option value="10">10 mm</option>
+        </select>
+      </div>
+      <div>
+        <label class="f">纸张方向</label>
+        <select id="orient">
+          <option value="portrait" selected>A4 纵向（210 × 297 mm）</option>
+          <option value="landscape">A4 横向（297 × 210 mm）</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:10px">
+      <div>
+        <label class="chk"><input type="checkbox" id="autoinvert" checked /> 自动识别深浅底（每张图各自判断）</label>
+        <label class="chk"><input type="checkbox" id="smart" checked /> 智能切分（在空白行下刀，不切断字）</label>
+        <label class="chk"><input type="checkbox" id="snap" checked /> 拖动切线时吸附到最近的空白行</label>
+      </div>
+    </div>
+
+    <details class="adv">
+      <summary>高级设置（分辨率、增白、切分范围、预览尺寸…）</summary>
+      <div class="grid">
+        <div>
+          <label class="f">输出分辨率<span class="q" title="1× 是原图 1:1，最锐利；2× 是插值放大，打印更平滑但文件更大。">?</span></label>
+          <select id="scale">
+            <option value="1" selected>1×（≈155 dpi，原图 1:1）</option>
+            <option value="1.5">1.5×（≈232 dpi）</option>
+            <option value="2">2×（≈310 dpi，插值放大）</option>
+          </select>
+        </div>
+        <div>
+          <label class="f">增白强度：<span id="sv">50</span><span class="q" title="把灰底压成纯白、笔迹压黑。太大会把细笔画吃掉一点。">?</span></label>
+          <input type="range" id="strength" min="0" max="100" value="50" />
+        </div>
+        <div>
+          <label class="f">内容缩放：<span id="csv">100</span>%<span class="q" title="小于 100% 表示把内容印小一点，一页能装更多内容，页数更少（省纸）。">?</span></label>
+          <input type="range" id="cscale" min="60" max="100" value="100" />
+        </div>
+        <div>
+          <label class="f">切分搜索范围：±<span id="wv">20</span>% 页高<span class="q" title="自动切分时允许在理想页高前后这么宽的范围内找空白行。字特别密时可调大。">?</span></label>
+          <input type="range" id="window" min="5" max="35" value="20" />
+        </div>
+        <div>
+          <label class="f">切线预览宽度：<span id="swv">340</span> px</label>
+          <input type="range" id="stripw" min="120" max="620" value="340" />
+        </div>
+        <div>
+          <label class="f">放大镜范围：上下各 <span id="dcv">150</span> px</label>
+          <input type="range" id="detailctx" min="60" max="420" value="150" />
+        </div>
+        <div>
+          <label class="f">JPG 质量：<span id="jv">92</span></label>
+          <input type="range" id="jpgq" min="60" max="100" value="92" />
+        </div>
+      </div>
+      <div class="grid">
+        <div>
+          <label class="chk"><input type="checkbox" id="invert" checked /> 反色（关闭自动识别时按此设置）</label>
+          <label class="chk"><input type="checkbox" id="trim" checked /> 自动裁掉开头 / 结尾的空白</label>
+          <label class="chk"><input type="checkbox" id="skipblank" checked /> 跳过完全空白的页</label>
+          <label class="chk"><input type="checkbox" id="balancetail" checked /> 末页太少时自动并页 / 匀分</label>
+        </div>
+      </div>
+    </details>
+
+    <div class="sep"></div>
+    <div class="row">
+      <button id="gen" disabled>生成并下载</button>
+      <button id="clear" class="ghost">清空文件</button>
+      <span class="muted">同时勾选多种输出时会合并成一个 ZIP 下载，避免浏览器拦截多次下载。</span>
+    </div>
+    <div class="bar"><i id="prog"></i></div>
+    <div class="status" id="status">等待添加图片…</div>
+    <div id="dl"></div>
+  </div>
+
+  <div id="list"></div>
+
+  <div class="card">
+    <h2>打印提示</h2>
+    <ul class="tips">
+      <li>打印 PDF：纸张选 A4，缩放选 <b>100%（实际大小）</b>，边距选 <b>无</b>，不要勾“适应可打印区域”，否则会被缩小。页面里已经自带 5mm 留白，所以打印机边距选“无”也不会切到字。</li>
+      <li>打印图片：把 ZIP 解压后，用系统看图 / 预览程序按 A4 全页打印，同样选“实际大小”。</li>
+      <li>每页图片本身就是 A4 比例，所以打印时铺满整页即可，不会变形。</li>
+      <li>如果原图本来就是白底黑字，请把“反色”取消勾选。</li>
+      <li><b>手动调切线：</b>每张图的红色横线可以直接用鼠标上下拖；双击空白处新增一条切线，选中后按 Delete 删除；上下方向键微调（Shift 加速 10 倍）。</li>
+      <li><b>检查效果：</b>点任意一页缩略图可看大图（← → 翻页、Esc 关闭、可切 1:1 实际像素），确认字清楚、没切到字。</li>
+      <li><b>不要的页：</b>缩略图右上角点 <b>×</b> 标记「不打印」，导出时这一页会被跳过（再点一次恢复）。</li>
+    </ul>
+  </div>
+</div>
+
+<div id="dropCover"><div class="box">松手即可添加图片<br><span style="font-size:14px;color:#9aa6b8">支持 PNG / JPG / WebP，可一次拖多张</span></div></div>
+<div id="viewer">
+  <div class="vtop">
+    <span class="title" id="vTitle">预览</span>
+    <span class="sp"></span>
+    <button class="ghost mini" id="vPrev">← 上一页</button>
+    <button class="ghost mini" id="vNext">下一页 →</button>
+    <button class="ghost mini" id="vOne">1:1 实际像素</button>
+    <button class="ghost mini" id="vClose">关闭 (Esc)</button>
+  </div>
+  <div class="vbody" id="vBody"></div>
+  <div class="vfoot" id="vFoot"></div>
+</div>
+<div id="dragTip"></div>
+<script>
+// ==== CORE-BEGIN ====
+/* ======================================================================
+   纯计算核心：不依赖 DOM，可在浏览器与 Node 中运行（供测试复用）
+   ====================================================================== */
+
+function concatBytes(list) {
+  let n = 0;
+  for (const b of list) n += b.length;
+  const out = new Uint8Array(n);
+  let p = 0;
+  for (const b of list) { out.set(b, p); p += b.length; }
+  return out;
+}
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function adler32(bytes) {
+  let a = 1, b = 0;
+  for (let i = 0; i < bytes.length; i++) { a = (a + bytes[i]) % 65521; b = (b + a) % 65521; }
+  return (((b << 16) | a) >>> 0);
+}
+
+/* zlib 存储块（CompressionStream 不可用时的兜底，输出仍是合法 zlib 流） */
+function zlibStore(bytes) {
+  const blocks = Math.max(1, Math.ceil(bytes.length / 65535));
+  const out = new Uint8Array(2 + bytes.length + blocks * 5 + 4);
+  let p = 0;
+  out[p++] = 0x78; out[p++] = 0x01;
+  let off = 0;
+  for (let i = 0; i < blocks; i++) {
+    const len = Math.min(65535, bytes.length - off);
+    out[p++] = (i === blocks - 1) ? 1 : 0;
+    out[p++] = len & 0xFF; out[p++] = (len >>> 8) & 0xFF;
+    const nl = (~len) & 0xFFFF;
+    out[p++] = nl & 0xFF; out[p++] = (nl >>> 8) & 0xFF;
+    out.set(bytes.subarray(off, off + len), p); p += len; off += len;
+  }
+  const ad = adler32(bytes);
+  out[p++] = (ad >>> 24) & 0xFF; out[p++] = (ad >>> 16) & 0xFF;
+  out[p++] = (ad >>> 8) & 0xFF;  out[p++] = ad & 0xFF;
+  return out.subarray(0, p);
+}
+
+async function deflateBytes(bytes) {
+  if (typeof CompressionStream === 'function') {
+    try {
+      const cs = new CompressionStream('deflate'); // 带 zlib 头，PNG / PDF 都适用
+      const stream = new Blob([bytes]).stream().pipeThrough(cs);
+      const buf = await new Response(stream).arrayBuffer();
+      return new Uint8Array(buf);
+    } catch (e) { /* 落回存储块 */ }
+  }
+  return zlibStore(bytes);
+}
+
+/* ---------------------------- PNG ---------------------------- */
+function pngChunk(type, data) {
+  const t = new TextEncoder().encode(type);
+  const out = new Uint8Array(12 + data.length);
+  const dv = new DataView(out.buffer);
+  dv.setUint32(0, data.length);
+  out.set(t, 4);
+  out.set(data, 8);
+  dv.setUint32(8 + data.length, crc32(concatBytes([t, data])));
+  return out;
+}
+
+/** 每行前置 filter=0（None），该缓冲区同时可直接用于 PDF 的 Predictor 15 */
+function filterRows(pixels, w, h, colors) {
+  const stride = w * colors;
+  const rowLen = stride + 1;
+  const out = new Uint8Array(rowLen * h);
+  for (let y = 0; y < h; y++) {
+    out[y * rowLen] = 0;
+    out.set(pixels.subarray(y * stride, (y + 1) * stride), y * rowLen + 1);
+  }
+  return out;
+}
+
+function buildPngFromDeflated(w, h, colors, idat) {
+  const ihdr = new Uint8Array(13);
+  const dv = new DataView(ihdr.buffer);
+  dv.setUint32(0, w); dv.setUint32(4, h);
+  ihdr[8] = 8; ihdr[9] = (colors === 3 ? 2 : 0);
+  ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  const sig = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+  return concatBytes([sig, pngChunk('IHDR', ihdr), pngChunk('IDAT', idat), pngChunk('IEND', new Uint8Array(0))]);
+}
+
+/* ---------------------------- ZIP（存储法，无需额外库） ---------------------------- */
+function makeZip(files, when) {
+  const enc = new TextEncoder();
+  const d = when || new Date(2024, 0, 1, 0, 0, 0);
+  const dosTime = ((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xFFFF;
+  const dosDate = (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xFFFF;
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const f of files) {
+    const name = enc.encode(f.name);
+    const data = f.data;
+    const crc = crc32(data);
+    const lh = new Uint8Array(30 + name.length);
+    const dv = new DataView(lh.buffer);
+    dv.setUint32(0, 0x04034b50, true);
+    dv.setUint16(4, 20, true);
+    dv.setUint16(6, 0x0800, true);   // UTF-8 文件名
+    dv.setUint16(8, 0, true);        // 0 = 存储
+    dv.setUint16(10, dosTime, true);
+    dv.setUint16(12, dosDate, true);
+    dv.setUint32(14, crc, true);
+    dv.setUint32(18, data.length, true);
+    dv.setUint32(22, data.length, true);
+    dv.setUint16(26, name.length, true);
+    dv.setUint16(28, 0, true);
+    lh.set(name, 30);
+    locals.push(lh, data);
+
+    const ch = new Uint8Array(46 + name.length);
+    const cv = new DataView(ch.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0x0800, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, dosTime, true);
+    cv.setUint16(14, dosDate, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, data.length, true);
+    cv.setUint32(24, data.length, true);
+    cv.setUint16(28, name.length, true);
+    cv.setUint32(42, offset, true);
+    ch.set(name, 46);
+    centrals.push(ch);
+    offset += lh.length + data.length;
+  }
+  const centralBytes = concatBytes(centrals);
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, centralBytes.length, true);
+  ev.setUint32(16, offset, true);
+  return concatBytes([...locals, centralBytes, eocd]);
+}
+
+/* ---------------------------- PDF（无损 FlateDecode + PNG 预测器） ---------------------------- */
+function makePdf(pages, opts) {
+  opts = opts || {};
+  const pageW = opts.pageW || 595.276;   // A4 595.276 × 841.89 pt
+  const pageH = opts.pageH || 841.89;
+  const enc = new TextEncoder();
+  const parts = [];
+  let offset = 0;
+  const offsets = [];
+  const push = (u8) => { parts.push(u8); offset += u8.length; };
+  const pushStr = (s) => push(enc.encode(s));
+  const startObj = (n) => { offsets[n] = offset; };
+
+  push(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x34, 0x0A]));      // %PDF-1.4
+  push(new Uint8Array([0x25, 0xE2, 0xE3, 0xCF, 0xD3, 0x0A]));                        // 二进制标记
+
+  const n = pages.length;
+  const objCount = 3 + n * 2;
+
+  startObj(1);
+  pushStr('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+
+  const kids = [];
+  for (let i = 0; i < n; i++) kids.push((4 + 2 * i) + ' 0 R');
+  startObj(2);
+  pushStr('2 0 obj\n<< /Type /Pages /Count ' + n + ' /Kids [' + kids.join(' ') + '] >>\nendobj\n');
+
+  const contentStr = 'q ' + pageW.toFixed(2) + ' 0 0 ' + pageH.toFixed(2) + ' 0 0 cm /Im0 Do Q\n';
+  const contentBytes = enc.encode(contentStr);
+  startObj(3);
+  pushStr('3 0 obj\n<< /Length ' + contentBytes.length + ' >>\nstream\n');
+  push(contentBytes);
+  pushStr('endstream\nendobj\n');
+
+  for (let i = 0; i < n; i++) {
+    const p = pages[i];
+    const pn = 4 + 2 * i, im = pn + 1;
+    startObj(pn);
+    pushStr(pn + ' 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' +
+      pageW.toFixed(2) + ' ' + pageH.toFixed(2) + '] /Resources << /XObject << /Im0 ' +
+      im + ' 0 R >> >> /Contents 3 0 R >>\nendobj\n');
+    startObj(im);
+    const cs = p.colors === 3 ? '/DeviceRGB' : '/DeviceGray';
+    const dec = '<< /Predictor 15 /Colors ' + p.colors + ' /BitsPerComponent 8 /Columns ' + p.width + ' >>';
+    pushStr(im + ' 0 obj\n<< /Type /XObject /Subtype /Image /Width ' + p.width + ' /Height ' + p.height +
+      ' /ColorSpace ' + cs + ' /BitsPerComponent 8 /Filter /FlateDecode /DecodeParms ' + dec +
+      ' /Length ' + p.data.length + ' >>\nstream\n');
+    push(p.data);
+    pushStr('\nendstream\nendobj\n');
+  }
+
+  const xrefOffset = offset;
+  let xref = 'xref\n0 ' + (objCount + 1) + '\n0000000000 65535 f \n';
+  for (let k = 1; k <= objCount; k++) xref += String(offsets[k] | 0).padStart(10, '0') + ' 00000 n \n';
+  pushStr(xref);
+  pushStr('trailer\n<< /Size ' + (objCount + 1) + ' /Root 1 0 R >>\nstartxref\n' + xrefOffset + '\n%%EOF\n');
+
+  return concatBytes(parts);
+}
+
+/* ---------------------------- 像素处理 ---------------------------- */
+function transformPixels(rgba, opt) {
+  const n = rgba.length >> 2;
+  const mode = opt.mode || 'gray';
+  if (mode === 'color') {
+    const out = new Uint8Array(n * 3);
+    for (let i = 0, j = 0; i < n; i++, j += 3) {
+      const p = i << 2;
+      out[j]     = opt.invert ? 255 - rgba[p]     : rgba[p];
+      out[j + 1] = opt.invert ? 255 - rgba[p + 1] : rgba[p + 1];
+      out[j + 2] = opt.invert ? 255 - rgba[p + 2] : rgba[p + 2];
+    }
+    return { colors: 3, pixels: out };
+  }
+  const out = new Uint8Array(n);
+  const lo = (opt.levelLo == null ? 0 : opt.levelLo);
+  const hi = (opt.levelHi == null ? 255 : opt.levelHi);
+  const k = 255 / Math.max(1, hi - lo);
+  const bw = (opt.bwThreshold == null ? 128 : opt.bwThreshold);
+  const inv = !!opt.invert;
+  for (let i = 0; i < n; i++) {
+    const p = i << 2;
+    let l = (rgba[p] * 0.299 + rgba[p + 1] * 0.587 + rgba[p + 2] * 0.114) | 0;
+    if (inv) l = 255 - l;
+    if (mode === 'bw') { out[i] = l >= bw ? 255 : 0; continue; }
+    let v = (l - lo) * k;
+    out[i] = v <= 0 ? 0 : (v >= 255 ? 255 : v | 0);
+  }
+  return { colors: 1, pixels: out };
+}
+
+function percentileFromHist(hist, total, pct) {
+  const target = total * pct / 100;
+  let acc = 0;
+  for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= target) return v; }
+  return 255;
+}
+
+function computeLevels(hist, total, strength) {
+  const s = Math.max(0, Math.min(100, strength == null ? 50 : strength));
+  const pctHi = 95 - 0.62 * s;                 // 强度 0 → 95%，100 → 33%
+  const lo = percentileFromHist(hist, total, 1.5);
+  let hi = percentileFromHist(hist, total, pctHi);
+  if (hi - lo < 40) hi = Math.min(255, lo + 40);
+  return { lo, hi };
+}
+
+function otsuThreshold(hist, total) {
+  let sum = 0;
+  for (let v = 0; v < 256; v++) sum += v * hist[v];
+  let sumB = 0, wB = 0, best = 0, bestVar = -1;
+  for (let v = 0; v < 256; v++) {
+    wB += hist[v];
+    if (!wB) continue;
+    const wF = total - wB;
+    if (!wF) break;
+    sumB += v * hist[v];
+    const mB = sumB / wB, mF = (sum - sumB) / wF;
+    const between = wB * wF * (mB - mF) * (mB - mF);
+    if (between > bestVar) { bestVar = between; best = v; }
+  }
+  return best;
+}
+
+function mirrorHist(hist) {
+  const out = new Uint32Array(256);
+  for (let v = 0; v < 256; v++) out[255 - v] = hist[v];
+  return out;
+}
+
+/* ---------------------------- 智能切页 ---------------------------- */
+/** 在 [lo, hi) 内找一条离 ideal 最近、长度达标的空白行；找不到就取内容最少的一行 */
+function findCutRow(ink, lo, hi, ideal, emptyThr, minRun) {
+  let bestRun = -1, bestStart = -1, bestEnd = -1, bestDist = Infinity;
+  let i = lo;
+  while (i < hi) {
+    if (ink[i] <= emptyThr) {
+      const s = i;
+      while (i < hi && ink[i] <= emptyThr) i++;
+      const len = i - s;
+      if (len >= minRun) {
+        const d = Math.abs((s + i) / 2 - ideal);
+        if (d < bestDist - 1e-9 || (Math.abs(d - bestDist) < 1e-9 && len > bestRun)) {
+          bestRun = len; bestStart = s; bestEnd = i; bestDist = d;
+        }
+      }
+    } else i++;
+  }
+  if (bestRun >= minRun) return Math.floor((bestStart + bestEnd) / 2);
+  let best = lo, bestScore = Infinity;
+  for (let j = lo; j < hi; j++) {
+    const score = ink[j] * 1000 - (j - lo) / Math.max(1, hi - lo);   // 内容最少优先，其次靠后
+    if (score < bestScore) { bestScore = score; best = j; }
+  }
+  return best;
+}
+
+/** 末页内容太少时：能并进前一页就直接并（省一张纸），并不下就把最后两页对半分 */
+function balanceTail(pages, ink, pageH, opt) {
+  if (pages.length < 2 || !(pageH > 0)) return pages;
+  let out = pages.slice();
+
+  for (let guard = 0; guard < 50; guard++) {
+    if (out.length < 2) break;
+    const last = out[out.length - 1];
+    const prev = out[out.length - 2];
+    if (last.y1 - last.y0 >= pageH * 0.6) break;
+    if (last.y1 - prev.y0 > pageH) break;           // 并起来会超过一页，不能并
+    out = out.slice(0, -2);
+    out.push({ y0: prev.y0, y1: last.y1 });
+  }
+
+  if (out.length >= 2) {
+    const last = out[out.length - 1];
+    const prev = out[out.length - 2];
+    const lastLen = last.y1 - last.y0;
+    const total = last.y1 - prev.y0;
+    if (lastLen < pageH * 0.6 && total > pageH) {
+      const target = prev.y0 + Math.round(total / 2);
+      const w = Math.round(pageH * 0.22);
+      const lo = Math.max(prev.y0 + Math.round(pageH * 0.3), target - w);
+      const hi = Math.min(last.y1 - 1, target + w);
+      if (hi > lo) {
+        const cut = findCutRow(ink, lo, hi, target, opt.emptyThr, opt.minRun);
+        if (cut - prev.y0 <= pageH && last.y1 - cut <= pageH && cut > prev.y0 && cut < last.y1) {
+          const next = out.slice(0, -2);
+          next.push({ y0: prev.y0, y1: cut }, { y0: cut, y1: last.y1 });
+          out = next;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * ink: 每行“有内容像素”的比例 (0..1)
+ * pageH: 每页在源图上的高度（像素）
+ */
+function computeCuts(ink, pageH, opt) {
+  opt = opt || {};
+  const H = ink.length;
+  const emptyThr = opt.emptyThr == null ? 0.012 : opt.emptyThr;
+  const windowRatio = opt.windowRatio == null ? 0.20 : opt.windowRatio;
+  const minFill = opt.minFill == null ? 0.5 : opt.minFill;
+  const trim = opt.trim !== false;
+  const minRun = opt.minRun == null ? 2 : opt.minRun;
+  const skipBlank = opt.skipBlank !== false;
+
+  let top = 0, bottom = H;
+  if (trim && H) {
+    while (top < H && ink[top] <= emptyThr) top++;
+    while (bottom > top && ink[bottom - 1] <= emptyThr) bottom--;
+    if (bottom - top < pageH * 0.15) { top = 0; bottom = H; }   // 几乎是空图，不裁
+  }
+
+  const pages = [];
+  let y = top, guard = 0;
+  while (y < bottom && guard++ < 20000) {
+    const ideal = y + pageH;
+    if (ideal >= bottom) { pages.push({ y0: y, y1: bottom }); break; }
+    const w = Math.max(6, Math.round(pageH * windowRatio));
+    const lo = Math.max(y + Math.round(pageH * minFill), ideal - w);
+    // 关键：切线只能早于理想页高，绝不推后 —— 否则一页内容会超出 A4 画布被裁掉
+    const hi = Math.min(bottom, ideal);
+    let cut = hi;
+    if (opt.smart !== false && hi > lo) cut = findCutRow(ink, lo, hi, ideal, emptyThr, minRun);
+    if (cut <= y + 2) cut = hi;
+    pages.push({ y0: y, y1: cut });
+    y = cut;
+  }
+
+  let result = pages;
+  if (opt.balanceTail !== false && pageH > 0) {
+    result = balanceTail(result, ink, pageH, { emptyThr, minRun });
+  }
+  if (skipBlank) {
+    const kept = result.filter(p => {
+      for (let i = p.y0; i < p.y1; i++) if (ink[i] > emptyThr) return true;
+      return false;
+    });
+    if (kept.length) result = kept;
+  }
+  return result;
+}
+
+// ==== CORE-END ====
+
+/* ======================================================================
+   界面与主流程
+   ====================================================================== */
+const $ = (s) => document.querySelector(s);
+const state = { items: [], uid: 0, busy: false };
+
+const DEFAULTS = { portrait: [210, 297], landscape: [297, 210] };
+
+function currentOptions() {
+  const orient = $('#orient').value;
+  const margin = parseFloat($('#margin').value) || 0;
+  const scale = parseFloat($('#scale').value) || 1;
+  const dims = DEFAULTS[orient];
+  const pageWmm = dims[0], pageHmm = dims[1];
+  return {
+    invert: $('#invert').checked,
+    autoInvert: $('#autoinvert').checked,
+    mode: $('#mode').value,
+    strength: +$('#strength').value,
+    contentScale: Math.max(0.3, Math.min(1, (+$('#cscale').value || 100) / 100)),
+    orient, margin, scale, pageWmm, pageHmm,
+    printWmm: Math.max(30, pageWmm - 2 * margin),
+    printHmm: Math.max(30, pageHmm - 2 * margin),
+    smart: $('#smart').checked,
+    windowRatio: (+$('#window').value) / 100,
+    trim: $('#trim').checked,
+    skipBlank: $('#skipblank').checked,
+    balanceTail: $('#balancetail').checked,
+    outPng: $('#outpng').checked,
+    outPdf: $('#outpdf').checked,
+    outJpg: $('#outjpg').checked,
+    jpgQ: (+$('#jpgq').value) / 100,
+  };
+}
+
+function setStatus(msg, cls) {
+  const el = $('#status');
+  el.textContent = msg;
+  el.className = 'status' + (cls ? ' ' + cls : '');
+}
+function setProgress(p) {
+  $('#prog').style.width = Math.max(0, Math.min(100, p * 100)).toFixed(1) + '%';
+}
+const tick = () => new Promise(r => setTimeout(r, 0));
+
+/* --------------------------- 文件载入 --------------------------- */
+function loadViaImg(file) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('图片解码失败')); };
+    img.src = url;
+  });
+}
+function loadBitmap(file) {
+  if (typeof createImageBitmap === 'function') {
+    return createImageBitmap(file).catch(() => loadViaImg(file));
+  }
+  return loadViaImg(file);
+}
+
+async function addFiles(fileList) {
+  if (state.busy) return;
+  const files = Array.from(fileList).filter(f =>
+    /^image\//.test(f.type) || /\.(png|jpe?g|webp|bmp|gif)$/i.test(f.name));
+  if (!files.length) { setStatus('没有识别到图片文件（支持 PNG / JPG / WebP）', 'err'); return; }
+
+  setStatus('正在读取图片…');
+  for (const f of files) {
+    const item = { id: ++state.uid, file: f, name: f.name.replace(/\.[^.]+$/, ''), status: 'loading' };
+    state.items.push(item);
+    try {
+      const bmp = await loadBitmap(f);
+      item.bitmap = bmp;
+      item.w = bmp.width; item.h = bmp.height;
+      item.status = 'ready';
+    } catch (e) {
+      item.status = 'error';
+      item.error = String(e && e.message || e);
+    }
+    render();
+  }
+  setStatus('正在分析内容分布（找空白行）…');
+  for (const item of state.items) {
+    if (item.status === 'ready' && !item.profile) await analyzeItem(item);
+  }
+  refreshPreviewAll();
+  $('#gen').disabled = !state.items.some(i => i.status === 'ready');
+  setStatus('分析完成，点“生成并下载”即可导出。');
+}
+
+/* --------------------------- 分析：行内容量 + 直方图 --------------------------- */
+const STRIP_H = 192;
+const stripCanvas = document.createElement('canvas');
+const stripCtx = stripCanvas.getContext('2d', { willReadFrequently: true });
+
+async function analyzeItem(item) {
+  const { w, h } = item;
+  stripCanvas.width = w; stripCanvas.height = STRIP_H;
+
+  // 第一遍：抽样估计背景亮度（众数）
+  const hist = new Uint32Array(256);
+  const sampleRows = 96;
+  const positions = [0.08, 0.3, 0.5, 0.7, 0.92].map(p => Math.max(0, Math.min(h - sampleRows, Math.round(h * p))));
+  for (const y of positions) {
+    stripCanvas.height = sampleRows;
+    stripCtx.clearRect(0, 0, w, sampleRows);
+    stripCtx.drawImage(item.bitmap, 0, y, w, sampleRows, 0, 0, w, sampleRows);
+    const d = stripCtx.getImageData(0, 0, w, sampleRows).data;
+    for (let i = 0; i < d.length; i += 4) {
+      hist[(d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) | 0]++;
+    }
+  }
+  let bg = 0, bgCount = -1;
+  for (let v = 0; v < 256; v++) if (hist[v] > bgCount) { bgCount = hist[v]; bg = v; }
+
+  // 第二遍：逐行统计内容比例 + 全图直方图
+  const profile = new Float32Array(h);
+  const rawHist = new Uint32Array(256);
+  stripCanvas.height = STRIP_H;
+  const DIFF = 48;
+  for (let y = 0; y < h; y += STRIP_H) {
+    const rows = Math.min(STRIP_H, h - y);
+    stripCtx.clearRect(0, 0, w, rows);
+    stripCtx.drawImage(item.bitmap, 0, y, w, rows, 0, 0, w, rows);
+    const d = stripCtx.getImageData(0, 0, w, rows).data;
+    for (let r = 0; r < rows; r++) {
+      let cnt = 0;
+      const base = r * w * 4;
+      for (let x = 0; x < w; x++) {
+        const p = base + x * 4;
+        const l = (d[p] * 0.299 + d[p + 1] * 0.587 + d[p + 2] * 0.114) | 0;
+        rawHist[l]++;
+        if (l > bg + DIFF || l < bg - DIFF) cnt++;
+      }
+      profile[y + r] = cnt / w;
+    }
+    if ((y / STRIP_H) % 8 === 0) { await tick(); }
+  }
+  item.profile = profile;
+  item.rawHist = rawHist;
+  item.bgLum = bg;
+  item.pages = [];
+}
+
+/* --------------------------- 变量 → 输出参数 --------------------------- */
+/** 一页 A4 在源图上对应多少像素高（内容缩放会让一页装下更多源像素） */
+function pageSrcHeight(item, opt) {
+  const k = Math.max(0.3, Math.min(1, opt.contentScale || 1));
+  return Math.max(20, Math.round(item.w * opt.printHmm / (opt.printWmm * k)));
+}
+
+/** 自动切分结果（不含手动调整） */
+function autoPagesFor(item, opt) {
+  return computeCuts(item.profile, pageSrcHeight(item, opt), {
+    smart: opt.smart,
+    windowRatio: opt.windowRatio,
+    trim: opt.trim,
+    skipBlank: opt.skipBlank,
+    balanceTail: opt.balanceTail,
+  });
+}
+
+/**
+ * 实际分页：有手动切线时以手动为准（首尾仍沿用自动结果，即开头/结尾空白会被裁掉）。
+ * item.manualCuts 只存“中间的切线”在源图上的 y 坐标。
+ */
+function pagesFor(item, opt) {
+  const auto = autoPagesFor(item, opt);
+  const mc = item.manualCuts;
+  if (!mc || !mc.length || !auto.length) return auto;
+  const top = auto[0].y0;
+  const bottom = auto[auto.length - 1].y1;
+  const bounds = mc.filter(y => y > top + 20 && y < bottom - 20).sort((a, b) => a - b);
+  const pages = [];
+  let y = top;
+  for (const b of bounds) {
+    if (b - y < 20) continue;
+    pages.push({ y0: y, y1: b });
+    y = b;
+  }
+  if (bottom - y >= 20) pages.push({ y0: y, y1: bottom });
+  return pages.length ? pages : auto;
+}
+
+/** 某页是否被标记“不打印”（按该页的内容范围记录） */
+function isSkipped(item, p) {
+  if (!item.skipped || !item.skipped.length) return false;
+  return item.skipped.some(r => p.y0 >= r[0] - 2 && p.y1 <= r[1] + 2);
+}
+
+function toggleSkip(item, p, opt) {
+  if (!item.skipped) item.skipped = [];
+  const hit = item.skipped.findIndex(r => p.y0 >= r[0] - 2 && p.y1 <= r[1] + 2);
+  if (hit >= 0) item.skipped.splice(hit, 1);
+  else item.skipped.push([p.y0, p.y1]);
+  afterEdit(item);
+  setStatus(hit >= 0 ? '已恢复这一页' : '已标记这一页不打印（导出时会跳过）');
+}
+
+/** 第一次手动调整时，用当前自动切线初始化手动列表 */
+function ensureManual(item, opt) {
+  if (!item.manualCuts) {
+    const auto = autoPagesFor(item, opt);
+    item.manualCuts = auto.slice(0, -1).map(p => p.y1);
+    if (item.selCut == null) item.selCut = 0;
+  }
+  return item.manualCuts;
+}
+
+/** 一页在画布上的几何（内容超高时等比缩小居中，保证绝不裁掉内容） */
+function pageGeom(item, cut, opt, cw, ch) {
+  const mx = Math.round(opt.margin / opt.pageWmm * cw);
+  const my = Math.round(opt.margin / opt.pageHmm * ch);
+  const areaW = Math.max(1, cw - 2 * mx);
+  const avail = Math.max(1, ch - 2 * my);
+  const zk = Math.max(0.3, Math.min(1, opt.contentScale || 1));
+  const iw = Math.max(1, areaW * zk);            // 实际绘制宽度（内容缩放）
+  const sh = cut.y1 - cut.y0;
+  const rawH = sh * iw / item.w;
+  let dw = iw, dh = rawH, dx = mx + (areaW - iw) / 2;
+  const shrunk = rawH > avail + 0.5;
+  if (shrunk) { const k = avail / rawH; dh = avail; dw = iw * k; dx = mx + (areaW - dw) / 2; }
+  return { mx, my, iw: areaW, sh, dw, dh, dx, avail, shrunk };
+}
+
+function transformOptFor(item, opt) {
+  const total = item.w * item.h;
+  const inv = effInvert(item, opt);
+  if (opt.mode === 'none') {
+    const lv0 = computeLevels(item.rawHist, total, opt.strength);
+    return { invert: false, mode: 'gray', levelLo: lv0.lo, levelHi: lv0.hi };
+  }
+  if (opt.mode === 'color') return { invert: inv, mode: 'color' };
+  const hist = inv ? mirrorHist(item.rawHist) : item.rawHist;
+  if (opt.mode === 'bw') return { invert: inv, mode: 'bw', bwThreshold: otsuThreshold(hist, total) };
+  const lv = computeLevels(hist, total, opt.strength);
+  return { invert: inv, mode: 'gray', levelLo: lv.lo, levelHi: lv.hi };
+}
+
+function pageCanvasSize(item, opt) {
+  const cw = Math.max(1, Math.round(item.w * opt.scale));
+  const ch = Math.max(1, Math.round(cw * opt.pageHmm / opt.pageWmm));
+  return { cw, ch };
+}
+
+/** 该图是否反色：自动模式下按检测到的底色判断（深底 → 反色） */
+function effInvert(item, opt) {
+  if (opt.mode === 'none') return false;                 // “不反色、保持原样”
+  if (opt.autoInvert && item && item.bgLum != null) return item.bgLum < 128;
+  return !!opt.invert;
+}
+
+/**
+ * 页面留白的底色：因为后面整页像素都会被“反色”，
+ * 所以反色时这里必须先填黑，反色之后留白才是白色（否则整片留白会变成黑的）。
+ */
+function pageFillColor(item, opt) {
+  return effInvert(item, opt) ? '#000000' : '#ffffff';
+}
+
+function drawPage(item, cut, opt, canvas) {
+  const { cw, ch } = pageCanvasSize(item, opt);
+  canvas.width = cw; canvas.height = ch;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = pageFillColor(item, opt);
+  ctx.fillRect(0, 0, cw, ch);
+  const g = pageGeom(item, cut, opt, cw, ch);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(item.bitmap, 0, cut.y0, item.w, g.sh, g.dx, g.my, g.dw, g.dh);
+  return ctx;
+}
+
+/* ======================================================================
+   切片编辑器：概览（可缩放）+ 放大镜（可拖动切线）
+   ====================================================================== */
+const EMPTY_THR = 0.012;      // 与自动切分一致的“空白行”判定
+const MIN_PAGE_PX = 40;       // 一页最少保留的源像素高度
+const detailTmp = document.createElement('canvas');
+const detailTmpCtx = detailTmp.getContext('2d', { willReadFrequently: true });
+let DRAG = null;
+
+function editorPrefs() {
+  return {
+    stripW: +($('#stripw').value || 300),
+    snap: $('#snap').checked,
+    ctxPx: +($('#detailctx').value || 150),
+  };
+}
+
+function dprFor(w, h) {
+  const d = Math.min(2, window.devicePixelRatio || 1);
+  const k = Math.sqrt(2600000 / Math.max(1, w * h));
+  return Math.max(1, Math.min(d, k));
+}
+
+/* --------------------------- 切线编辑操作 --------------------------- */
+/** 吸附：在半径内找最近的空白行，并取该空白段中心；找不到就原样返回 */
+function snapToBlank(item, y, scale, minY, maxY) {
+  if (!editorPrefs().snap || !item.profile) return y;
+  const ink = item.profile;
+  const radius = Math.max(1, Math.round(18 / Math.max(0.0005, scale || 1)));
+  let found = -1;
+  for (let d = 0; d <= radius && found < 0; d++) {
+    const cands = d === 0 ? [y] : [y - d, y + d];
+    for (const c of cands) {
+      if (c >= minY && c <= maxY && c >= 0 && c < ink.length && ink[c] <= EMPTY_THR) { found = c; break; }
+    }
+  }
+  if (found < 0) return y;
+  // 只吸附到“离鼠标最近的那一行空白”，不跳到空白段中间，
+  // 否则遇到大段空白时切线会被甩出去很远。
+  return Math.max(minY, Math.min(maxY, found));
+}
+
+/** 把第 idx 条切线移到 newY（自动夹在相邻切线之间；snapScale 为 null 表示不吸附） */
+function moveCutTo(item, opt, idx, newY, snapScale) {
+  const pages = pagesFor(item, opt);
+  if (idx < 0 || idx > pages.length - 2) return false;
+  const minY = pages[idx].y0 + MIN_PAGE_PX;
+  const maxY = pages[idx + 1].y1 - MIN_PAGE_PX;
+  if (maxY <= minY) return false;
+  let y = Math.max(minY, Math.min(maxY, Math.round(newY)));
+  if (snapScale != null) y = snapToBlank(item, y, snapScale, minY, maxY);
+  const bounds = pages.slice(0, -1).map(q => q.y1);
+  bounds[idx] = y;
+  item.manualCuts = bounds;
+  return true;
+}
+
+function addCutAt(item, opt, srcY) {
+  const pages = pagesFor(item, opt);
+  let pi = pages.length - 1;
+  for (let i = 0; i < pages.length; i++) {
+    if (srcY >= pages[i].y0 && srcY <= pages[i].y1) { pi = i; break; }
+  }
+  const p = pages[pi];
+  if (!p) return false;
+  if (srcY - p.y0 < MIN_PAGE_PX || p.y1 - srcY < MIN_PAGE_PX) return false;
+  const bounds = pages.slice(0, -1).map(q => q.y1);
+  bounds.splice(pi, 0, Math.round(srcY));
+  item.manualCuts = bounds;
+  item.selCut = pi;
+  return true;
+}
+
+function removeCut(item, opt, idx) {
+  const pages = pagesFor(item, opt);
+  if (idx < 0 || idx > pages.length - 2) return false;
+  const bounds = pages.slice(0, -1).map(q => q.y1);
+  bounds.splice(idx, 1);
+  item.manualCuts = bounds;
+  item.selCut = Math.max(0, Math.min(bounds.length - 1, idx));
+  return true;
+}
+
+function hitCut(item, opt, srcY, tol) {
+  const pages = item._pages || pagesFor(item, opt);
+  let best = -1, bestD = Infinity;
+  for (let i = 0; i < pages.length - 1; i++) {
+    const d = Math.abs(pages[i].y1 - srcY);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return bestD <= tol ? best : -1;
+}
+
+function nearestCut(item, opt, srcY) {
+  const pages = item._pages || pagesFor(item, opt);
+  let best = 0, bestD = Infinity;
+  for (let i = 0; i < pages.length - 1; i++) {
+    const d = Math.abs(pages[i].y1 - srcY);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
+function canvasSrcY(canvas, item, clientY, kind) {
+  const r = canvas.getBoundingClientRect();
+  const rel = (clientY - r.top) / Math.max(1, r.height);
+  if (kind === 'strip') return Math.max(0, Math.min(item.h, Math.round(rel * item.h)));
+  const w = item._ui && item._ui.detailWin;
+  if (!w) return 0;
+  return Math.max(0, Math.min(item.h, Math.round(w.y0 + rel * w.winH)));
+}
+
+/* --------------------------- 绘制：概览底图 --------------------------- */
+/** 概览条的底图：默认画“处理后的白底效果”，可切回原图对照 */
+function drawStripBase(item, opt) {
+  const ui = item._ui;
+  if (!ui || !ui.base) return;
+  const sw = ui.sw, sh = ui.sh;
+  const b = ui.baseCtx;
+  b.setTransform(1, 0, 0, 1, 0, 0);
+  b.fillStyle = item.overviewRaw ? '#000000' : '#ffffff';
+  b.fillRect(0, 0, sw, sh);
+  b.imageSmoothingEnabled = true;
+  b.imageSmoothingQuality = 'medium';
+  b.drawImage(item.bitmap, 0, 0, item.w, item.h, 0, 0, sw, sh);
+  if (item.overviewRaw) return;               // 看原图模式：直接显示深色原图
+  try {
+    const id = b.getImageData(0, 0, sw, sh);
+    const res = transformPixels(id.data, transformOptFor(item, opt));
+    putPixels(b, sw, sh, res);
+  } catch (e) { /* 缩略图处理失败不影响主流程 */ }
+}
+
+/* --------------------------- 绘制：概览 --------------------------- */
+function drawStripOverlay(item, opt) {
+  const ui = item._ui;
+  if (!ui || !ui.ov) return;
+  const sw = ui.sw, sh = ui.sh, scale = ui.scale;
+  const c = ui.ovCtx;
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.clearRect(0, 0, sw, sh);
+  const pages = item._pages || pagesFor(item, opt);
+  const pageSrcH = pageSrcHeight(item, opt);
+
+  c.fillStyle = 'rgba(76,141,255,.10)';
+  pages.forEach((p, i) => { if (i % 2 === 0) c.fillRect(0, p.y0 * scale, sw, (p.y1 - p.y0) * scale); });
+
+  c.font = '600 10px -apple-system, "PingFang SC", sans-serif';
+  c.textBaseline = 'middle';
+  for (let i = 0; i < pages.length; i++) {
+    const p = pages[i];
+    const pct = Math.round((p.y1 - p.y0) / pageSrcH * 100);
+    const h = (p.y1 - p.y0) * scale;
+    if (h > 20) {
+      const text = (i + 1) + ' · ' + pct + '%' + (pct > 100 ? ' ⚠' : '');
+      const tw = c.measureText(text).width + 10;
+      const y = p.y0 * scale + Math.min(h / 2, 24);
+      c.fillStyle = pct > 100 ? 'rgba(120,45,0,.88)' : 'rgba(0,0,0,.62)';
+      c.fillRect(3, y - 8, tw, 16);
+      c.fillStyle = pct > 100 ? '#ffd0a0' : '#dbe6f5';
+      c.fillText(text, 8, y);
+    }
+    if (i < pages.length - 1) {
+      const y = p.y1 * scale;
+      const sel = item.selCut === i;
+      c.fillStyle = sel ? '#ffd60a' : '#ff3b30';
+      c.fillRect(0, y - (sel ? 2 : 1), sw, sel ? 4 : 2);
+      c.beginPath(); c.moveTo(0, y - 7); c.lineTo(11, y); c.lineTo(0, y + 7); c.closePath(); c.fill();
+      c.beginPath(); c.moveTo(sw, y - 7); c.lineTo(sw - 11, y); c.lineTo(sw, y + 7); c.closePath(); c.fill();
+    }
+  }
+}
+
+/* --------------------------- 绘制：放大镜 --------------------------- */
+function detailSel(item, opt) {
+  const pages = item._pages || pagesFor(item, opt);
+  const n = pages.length;
+  let idx = item.selCut == null ? 0 : item.selCut;
+  idx = Math.max(0, Math.min(Math.max(0, n - 2), idx));
+  return { pages: pages, idx: idx, line: n >= 2 ? pages[idx].y1 : 0 };
+}
+
+function drawDetail(item, opt) {
+  const ui = item._ui;
+  if (!ui || !ui.detail) return;
+  const prefs = editorPrefs();
+  const sel = detailSel(item, opt);
+  const pages = sel.pages, idx = sel.idx, line = sel.line;
+  if (pages.length < 2) {
+    ui.detail.width = 2; ui.detail.height = 2;
+    if (ui.infoEl) ui.infoEl.textContent = '只有一页，无需切线（可双击概览增加切线）';
+    return;
+  }
+  const cw = Math.max(280, Math.round(ui.detailCol.clientWidth || 480));
+  const zoom = item.detailZoom || 1;
+  const viewW = item.w / zoom;
+  const cx = item.detailCx == null ? item.w / 2 : item.detailCx;
+  const x0 = Math.max(0, Math.min(item.w - viewW, cx - viewW / 2));
+  const y0 = Math.max(0, line - prefs.ctxPx);
+  const y1 = Math.min(item.h, line + prefs.ctxPx);
+  const winH = Math.max(8, y1 - y0);
+  const s = cw / viewW;
+  const dh = Math.max(30, Math.round(winH * s));
+  const dpr = dprFor(cw, dh);
+  ui.detailWin = { x0: x0, y0: y0, viewW: viewW, winH: winH, s: s, dpr: dpr };
+
+  ui.detail.width = Math.round(cw * dpr);
+  ui.detail.height = Math.round(dh * dpr);
+  ui.detail.style.width = cw + 'px';
+  ui.detail.style.height = dh + 'px';
+
+  detailTmp.width = ui.detail.width;
+  detailTmp.height = ui.detail.height;
+  const tc = detailTmpCtx;
+  tc.setTransform(1, 0, 0, 1, 0, 0);
+  tc.fillStyle = pageFillColor(item, opt);
+  tc.fillRect(0, 0, detailTmp.width, detailTmp.height);
+  tc.imageSmoothingEnabled = true;
+  tc.imageSmoothingQuality = 'high';
+  tc.drawImage(item.bitmap, x0, y0, viewW, winH, 0, 0, detailTmp.width, detailTmp.height);
+
+  const c = ui.detailCtx2d;
+  try {
+    const id = tc.getImageData(0, 0, detailTmp.width, detailTmp.height);
+    const res = transformPixels(id.data, transformOptFor(item, opt));
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    putPixels(c, detailTmp.width, detailTmp.height, res);
+  } catch (e) { /* 忽略 */ }
+
+  // ---- 覆盖层（CSS 像素坐标） ----
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const toY = (srcY) => (srcY - y0) * s;
+  const pageSrcH = pageSrcHeight(item, opt);
+
+  // 上一页的 A4 底边
+  const g1 = pages[idx].y0 + pageSrcH;
+  if (g1 > y0 && g1 < y1) {
+    c.setLineDash([6, 4]);
+    c.strokeStyle = '#38d1ff'; c.lineWidth = 1;
+    c.beginPath(); c.moveTo(0, toY(g1)); c.lineTo(cw, toY(g1)); c.stroke();
+    c.setLineDash([]);
+    c.font = '11px -apple-system, "PingFang SC", sans-serif'; c.textBaseline = 'middle';
+    const t = '第 ' + (idx + 1) + ' 页 A4 底边';
+    const tw = c.measureText(t).width + 10;
+    c.fillStyle = 'rgba(0,45,64,.82)'; c.fillRect(cw - tw - 4, toY(g1) - 8.5, tw, 17);
+    c.fillStyle = '#8fe6ff'; c.fillText(t, cw - tw + 1, toY(g1));
+  }
+  // 超出 A4 的部分标红
+  if (line > g1) {
+    c.fillStyle = 'rgba(255,59,48,.18)';
+    c.fillRect(0, toY(g1), cw, Math.max(0, toY(line) - toY(g1)));
+  }
+  // 其它切线
+  c.setLineDash([5, 4]); c.lineWidth = 1; c.strokeStyle = 'rgba(255,59,48,.75)';
+  for (let i = 0; i < pages.length - 1; i++) {
+    if (i === idx) continue;
+    const y = pages[i].y1;
+    if (y > y0 && y < y1) { c.beginPath(); c.moveTo(0, toY(y)); c.lineTo(cw, toY(y)); c.stroke(); }
+  }
+  c.setLineDash([]);
+  // 选中切线
+  c.strokeStyle = '#ffd60a'; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(0, toY(line)); c.lineTo(cw, toY(line)); c.stroke();
+  c.fillStyle = '#ffd60a';
+  c.beginPath(); c.moveTo(0, toY(line) - 6); c.lineTo(12, toY(line)); c.lineTo(0, toY(line) + 6); c.closePath(); c.fill();
+  c.beginPath(); c.moveTo(cw, toY(line) - 6); c.lineTo(cw - 12, toY(line)); c.lineTo(cw, toY(line) + 6); c.closePath(); c.fill();
+
+  // ---- 文字信息 ----
+  if (ui.infoEl) {
+    const pa = pages[idx], pb = pages[idx + 1];
+    const pctA = Math.round((pa.y1 - pa.y0) / pageSrcH * 100);
+    const pctB = Math.round((pb.y1 - pb.y0) / pageSrcH * 100);
+    let html = '<b>第 ' + (idx + 1) + ' 条切线</b> · 源 y = <b>' + line + '</b>' +
+      ' · 上一页（第 ' + (idx + 1) + ' 页）' + (pa.y1 - pa.y0) + ' px（A4 的 ' + pctA + '%）' +
+      ' · 下一页（第 ' + (idx + 2) + ' 页）' + (pb.y1 - pb.y0) + ' px（A4 的 ' + pctB + '%）';
+    if (pctA > 100) html += ' · <span class="warn">上一页超出 A4，导出时会等比缩小</span>';
+    if (pctB > 100) html += ' · <span class="warn">下一页超出 A4，导出时会等比缩小</span>';
+    html += '<br>拖动黄线＝调整这条切线；双击＝新增切线；选中后按 ↑↓ 微调、Shift+↑↓ 一次 10 px。';
+    ui.infoEl.innerHTML = html;
+  }
+}
+
+/* --------------------------- 绘制：每页缩略图 --------------------------- */
+function buildThumbs(item, opt) {
+  const ui = item._ui;
+  if (!ui || !ui.thumbs) return;
+  const box = ui.thumbs;
+  box.innerHTML = '';
+  const pages = item._pages || pagesFor(item, opt);
+  const topt = transformOptFor(item, opt);
+  const previewW = 132;
+  const previewH = Math.max(1, Math.round(previewW * opt.pageHmm / opt.pageWmm));
+  const pageSrcH = pageSrcHeight(item, opt);
+  const maxShow = 40;
+  for (let i = 0; i < Math.min(pages.length, maxShow); i++) {
+    const cut = pages[i];
+    const tc = document.createElement('canvas');
+    tc.width = previewW; tc.height = previewH;
+    const tctx = tc.getContext('2d', { willReadFrequently: true });
+    tctx.fillStyle = pageFillColor(item, opt);
+    tctx.fillRect(0, 0, previewW, previewH);
+    const g = pageGeom(item, cut, opt, previewW, previewH);
+    tctx.imageSmoothingEnabled = true;
+    tctx.imageSmoothingQuality = 'high';
+    tctx.drawImage(item.bitmap, 0, cut.y0, item.w, g.sh, g.dx, g.my, g.dw, g.dh);
+    try {
+      const id = tctx.getImageData(0, 0, previewW, previewH);
+      putPixels(tctx, previewW, previewH, transformPixels(id.data, topt));
+    } catch (e) { /* 预览失败不影响导出 */ }
+    const pct = Math.round((cut.y1 - cut.y0) / pageSrcH * 100);
+    const tw = document.createElement('div');
+    tw.className = 'thumb';
+    tw.title = '第 ' + (i + 1) + ' 页 · ' + (cut.y1 - cut.y0) + ' px（A4 的 ' + pct + '%）' + (g.shrunk ? ' · 超出页高，导出时缩小' : '');
+    tw.appendChild(tc);
+    const no = document.createElement('div');
+    no.className = 'no';
+    no.textContent = String(i + 1);
+    tw.appendChild(no);
+    if (g.shrunk) {
+      const wn = document.createElement('div');
+      wn.className = 'no';
+      wn.style.left = 'auto'; wn.style.right = '3px';
+      wn.style.background = 'rgba(190,60,0,.85)';
+      wn.textContent = '超';
+      tw.appendChild(wn);
+    }
+    // 右上角：这一页不打印
+    const skipped = isSkipped(item, cut);
+    const sk = document.createElement('button');
+    sk.className = 'skip';
+    sk.textContent = skipped ? '↺' : '×';
+    sk.title = skipped ? '恢复这一页' : '这一页不打印（导出时会跳过）';
+    sk.onclick = (ev) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+      toggleSkip(item, cut, opt);
+    };
+    tw.appendChild(sk);
+    if (skipped) tw.classList.add('skipped');
+    // 点缩略图 → 看大图
+    tw.onclick = () => openViewer(item, i);
+    box.appendChild(tw);
+  }
+  if (pages.length > maxShow) {
+    const more = document.createElement('div');
+    more.className = 'muted';
+    more.textContent = '…… 共 ' + pages.length + ' 页，仅预览前 ' + maxShow + ' 页';
+    box.appendChild(more);
+  }
+}
+
+/* --------------------------- 大图预览 --------------------------- */
+const viewerState = { item: null, idx: 0, one: false };
+
+function viewerPages() {
+  const item = viewerState.item;
+  if (!item) return [];
+  return item._pages || pagesFor(item, currentOptions());
+}
+
+function openViewer(item, idx) {
+  viewerState.item = item;
+  viewerState.idx = idx;
+  viewerState.one = false;
+  const one = $('#vOne');
+  if (one) one.textContent = '1:1 实际像素';
+  $('#viewer').classList.add('show');
+  document.body.style.overflow = 'hidden';
+  renderViewer();
+}
+
+function closeViewer() {
+  const v = $('#viewer');
+  if (!v) return;
+  v.classList.remove('show');
+  document.body.style.overflow = '';
+  const body = $('#vBody');
+  if (body) body.innerHTML = '';
+  viewerState.item = null;
+}
+
+function renderViewer() {
+  const item = viewerState.item;
+  if (!item) return;
+  const opt = currentOptions();
+  const pages = viewerPages();
+  if (!pages.length) { closeViewer(); return; }
+  viewerState.idx = Math.max(0, Math.min(pages.length - 1, viewerState.idx));
+  const idx = viewerState.idx;
+  const cut = pages[idx];
+  const canvas = document.createElement('canvas');
+  drawPage(item, cut, opt, canvas);
+  try {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    putPixels(ctx, canvas.width, canvas.height, transformPixels(id.data, transformOptFor(item, opt)));
+  } catch (e) { /* 预览失败不影响导出 */ }
+  const body = $('#vBody');
+  body.innerHTML = '';
+  body.classList.toggle('one-one', !!viewerState.one);
+  canvas.style.width = viewerState.one ? canvas.width + 'px' : 'min(1000px, 94vw)';
+  canvas.style.height = 'auto';
+  body.appendChild(canvas);
+
+  const skipped = isSkipped(item, cut);
+  $('#vTitle').textContent = item.name + ' · 第 ' + (idx + 1) + ' / ' + pages.length + ' 页' + (skipped ? '（已标记不打印）' : '');
+  const pct = Math.round((cut.y1 - cut.y0) / pageSrcHeight(item, opt) * 100);
+  $('#vFoot').textContent = '源图 y ' + cut.y0 + '–' + cut.y1 +
+    ' · 内容 ' + (cut.y1 - cut.y0) + ' px（A4 的 ' + pct + '%）' +
+    ' · 输出 ' + canvas.width + '×' + canvas.height + ' px' +
+    ' · ' + (opt.pageWmm === 210 ? 'A4 纵向' : 'A4 横向');
+}
+
+function scrollStripTo(item, idx) {
+  const ui = item._ui;
+  if (!ui || !ui.stripBox) return;
+  const pages = item._pages || [];
+  if (!pages[idx]) return;
+  const box = ui.stripBox;
+  const y = pages[idx].y1 * ui.scale;
+  box.scrollTop = Math.max(0, Math.min(box.scrollHeight - box.clientHeight, y - box.clientHeight * 0.42));
+  item._stripScroll = box.scrollTop;
+}
+
+/* --------------------------- 重排一张图 --------------------------- */
+function layoutItem(item, opt) {
+  const ui = item._ui;
+  if (!ui) return;
+  const prefs = editorPrefs();
+  item._pages = pagesFor(item, opt);
+  const pages = item._pages;
+  clampSelCut(item, pages);
+
+  // 概览（对超长图限制画布总像素，避免占用过多内存）
+  let sw = Math.round(prefs.stripW);
+  const MAX_CANVAS_PX = 6e6;
+  if (sw * (item.h * sw / item.w) > MAX_CANVAS_PX) {
+    sw = Math.max(120, Math.floor(Math.sqrt(MAX_CANVAS_PX * item.w / item.h)));
+  }
+  const sh = Math.max(20, Math.round(item.h * sw / item.w));
+  ui.sw = sw; ui.sh = sh; ui.scale = sh / item.h;
+  ui.wrap.style.width = sw + 'px';
+  ui.wrap.style.height = sh + 'px';
+  for (const cv of [ui.base, ui.ov]) {
+    cv.width = sw; cv.height = sh;
+    cv.style.width = sw + 'px'; cv.style.height = sh + 'px';
+  }
+  drawStripBase(item, opt);
+  drawStripOverlay(item, opt);
+
+  // 放大镜 + 缩略图
+  drawDetail(item, opt);
+  buildThumbs(item, opt);
+
+  // 头部信息
+  updateHeadTag(item, opt);
+  // 恢复滚动位置
+  if (item._stripScroll != null) ui.stripBox.scrollTop = item._stripScroll;
+  else if (pages.length >= 2) scrollStripTo(item, 0);
+}
+
+/** 保证选中的切线序号有效（默认选第 1 条） */
+function clampSelCut(item, pages) {
+  const maxLine = Math.max(0, (pages ? pages.length : 1) - 2);
+  if (item.selCut == null) item.selCut = 0;
+  else if (item.selCut > maxLine) item.selCut = maxLine;
+  else if (item.selCut < 0) item.selCut = 0;
+}
+
+function updateHeadTag(item, opt) {
+  const ui = item._ui;
+  if (!ui || !ui.headTag) return;
+  const pages = item._pages || pagesFor(item, opt);
+  const manual = (item.manualCuts && item.manualCuts.length) ? item.manualCuts.length : 0;
+  const skipN = pages.filter(p => isSkipped(item, p)).length;
+  ui.headTag.textContent = '切成 ' + pages.length + ' 页 · 每页 ' + pageSrcHeight(item, opt) + ' px 高' +
+    (manual ? ' · 已手动调整 ' + manual + ' 条切线' : '') +
+    (skipN ? ' · ' + skipN + ' 页不打印' : '');
+}
+
+/** 编辑后（松开鼠标 / 键盘微调）刷新缩略图与文字 */
+function afterEdit(item) {
+  const opt = currentOptions();
+  item._pages = pagesFor(item, opt);
+  clampSelCut(item, item._pages);
+  drawStripOverlay(item, opt);
+  drawDetail(item, opt);
+  buildThumbs(item, opt);
+  updateHeadTag(item, opt);
+}
+
+/* --------------------------- 交互 --------------------------- */
+function nudgeBy(item, d) {
+  const opt = currentOptions();
+  const pages = pagesFor(item, opt);
+  if (pages.length < 2) return;
+  const idx = Math.max(0, Math.min(pages.length - 2, item.selCut == null ? 0 : item.selCut));
+  ensureManual(item, opt);
+  moveCutTo(item, opt, idx, pages[idx].y1 + d, null);   // 键盘微调不吸附
+  afterEdit(item);
+  scrollStripTo(item, idx);
+}
+
+function onEditKey(ev, item) {
+  const opt = currentOptions();
+  const pages = pagesFor(item, opt);
+  if (pages.length < 2) return;
+  const idx = Math.max(0, Math.min(pages.length - 2, item.selCut == null ? 0 : item.selCut));
+  if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
+    ev.preventDefault();
+    const step = (ev.shiftKey ? 10 : 1) * (ev.key === 'ArrowUp' ? -1 : 1);
+    ensureManual(item, opt);
+    moveCutTo(item, opt, idx, pages[idx].y1 + step, null);
+    afterEdit(item);
+    scrollStripTo(item, idx);
+  } else if (ev.key === 'PageUp' || ev.key === 'PageDown') {
+    ev.preventDefault();
+    const step = (ev.key === 'PageUp' ? -1 : 1) * 100;
+    ensureManual(item, opt);
+    moveCutTo(item, opt, idx, pages[idx].y1 + step, null);
+    afterEdit(item);
+    scrollStripTo(item, idx);
+  } else if (ev.key === 'Delete' || ev.key === 'Backspace') {
+    ev.preventDefault();
+    ensureManual(item, opt);
+    removeCut(item, opt, idx);
+    afterEdit(item);
+  }
+}
+
+function edgeScroll() {
+  if (!DRAG || DRAG.kind !== 'strip') { DRAG = DRAG || null; return; }
+  const box = DRAG.item._ui.stripBox;
+  const r = box.getBoundingClientRect();
+  const EDGE = 36, STEP = 16;
+  let d = 0;
+  if (DRAG.clientY < r.top + EDGE) d = -STEP * (1 - (DRAG.clientY - r.top) / EDGE);
+  else if (DRAG.clientY > r.bottom - EDGE) d = STEP * (1 - (r.bottom - DRAG.clientY) / EDGE);
+  if (d) {
+    const before = box.scrollTop;
+    box.scrollTop = before + d;
+    if (box.scrollTop !== before) {
+      DRAG.item._stripScroll = box.scrollTop;
+      applyDragAtStoredY();
+    }
+  }
+  if (DRAG) DRAG.raf = requestAnimationFrame(edgeScroll);
+}
+
+function applyDragAtStoredY() {
+  if (!DRAG) return;
+  const opt = currentOptions();
+  const item = DRAG.item;
+  const ui = item._ui;
+  const canvas = DRAG.kind === 'strip' ? ui.ov : ui.detail;
+  const scale = DRAG.kind === 'strip' ? ui.scale : (ui.detailWin ? ui.detailWin.s : 1);
+  const srcY = canvasSrcY(canvas, item, DRAG.clientY, DRAG.kind);
+  ensureManual(item, opt);
+  moveCutTo(item, opt, DRAG.idx, srcY, scale);
+  drawStripOverlay(item, opt);
+  drawDetail(item, opt);
+  const pages = pagesFor(item, opt);
+  if (pages[DRAG.idx]) showDragTip(item, opt, pages[DRAG.idx].y1);
+}
+
+function onDragEnd() {
+  if (!DRAG) return;
+  const item = DRAG.item;
+  if (DRAG.raf) cancelAnimationFrame(DRAG.raf);
+  DRAG = null;
+  hideDragTip();
+  afterEdit(item);
+}
+
+function showDragTip(item, opt, y) {
+  const tip = $('#dragTip');
+  if (!tip) return;
+  const pages = pagesFor(item, opt);
+  const pageSrcH = pageSrcHeight(item, opt);
+  const pct = (p) => Math.round((p.y1 - p.y0) / pageSrcH * 100);
+  let above = null, below = null;
+  for (let i = 0; i < pages.length - 1; i++) {
+    if (Math.abs(pages[i].y1 - y) <= 1) { above = pages[i]; below = pages[i + 1]; break; }
+  }
+  if (!above) {
+    above = pages.find(q => y >= q.y0 && y <= q.y1) || null;
+  }
+  let html = '<b>y ' + y + '</b>';
+  if (above) html += ' · 上页 ' + pct(above) + '%';
+  if (below) html += ' · 下页 ' + pct(below) + '%';
+  tip.innerHTML = html;
+  tip.style.left = Math.min(window.innerWidth - 150, (DRAG ? DRAG.clientX : 0) + 16) + 'px';
+  tip.style.top = Math.max(8, (DRAG ? DRAG.clientY : 0) - 34) + 'px';
+  tip.classList.add('show');
+}
+
+function hideDragTip() {
+  const tip = $('#dragTip');
+  if (tip) tip.classList.remove('show');
+}
+
+function attachDrag(canvas, item, kind) {
+  canvas.tabIndex = 0;
+  canvas.title = '拖动可调整切线；方向键微调；Delete 删除';
+  canvas.style.touchAction = 'none';
+  canvas.addEventListener('pointerdown', (ev) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault();
+    const opt = currentOptions();
+    const ui = item._ui;
+    const scale = kind === 'strip' ? ui.scale : (ui.detailWin ? ui.detailWin.s : 1);
+    const srcY = canvasSrcY(canvas, item, ev.clientY, kind);
+    const tol = Math.max(4, 12 / Math.max(0.0005, scale));
+    let idx = hitCut(item, opt, srcY, tol);
+    if (idx < 0) {
+      idx = nearestCut(item, opt, srcY);
+      item.selCut = idx;
+      drawStripOverlay(item, opt);
+      drawDetail(item, opt);
+      scrollStripTo(item, idx);
+      return;
+    }
+    item.selCut = idx;
+    // 注意：不能用 canvas.focus()，浏览器会把这张很高的画布“滚进视野”，
+    // 导致拖动过程中坐标基准跳变，切线乱飞。
+    try { canvas.focus({ preventScroll: true }); } catch (e) { /* 老浏览器忽略 */ }
+    DRAG = { item: item, kind: kind, idx: idx, clientX: ev.clientX, clientY: ev.clientY, canvas: canvas, moved: false, raf: 0 };
+    try { canvas.setPointerCapture(ev.pointerId); } catch (e) { /* 忽略 */ }
+    drawStripOverlay(item, opt);
+    drawDetail(item, opt);
+    DRAG.raf = requestAnimationFrame(edgeScroll);
+  });
+  canvas.addEventListener('pointermove', (ev) => {
+    if (!DRAG || DRAG.canvas !== canvas) return;
+    DRAG.clientX = ev.clientX;
+    DRAG.clientY = ev.clientY;
+    applyDragAtStoredY();
+  });
+  const finish = () => { if (DRAG && DRAG.canvas === canvas) onDragEnd(); };
+  canvas.addEventListener('pointerup', finish);
+  canvas.addEventListener('pointercancel', finish);
+  canvas.addEventListener('lostpointercapture', finish);
+  canvas.addEventListener('dblclick', (ev) => {
+    const opt = currentOptions();
+    const srcY = canvasSrcY(canvas, item, ev.clientY, kind);
+    ensureManual(item, opt);
+    if (addCutAt(item, opt, srcY)) afterEdit(item);
+  });
+  canvas.addEventListener('keydown', (ev) => onEditKey(ev, item));
+}
+
+/* --------------------------- 整个列表 --------------------------- */
+function render() {
+  const list = $('#list');
+  list.innerHTML = '';
+  if (!state.items.length) return;
+  const opt = currentOptions();
+
+  for (const item of state.items) {
+    item._ui = null;
+    const box = document.createElement('div');
+    box.className = 'file';
+
+    const hd = document.createElement('div');
+    hd.className = 'hd';
+    const left = document.createElement('div');
+    left.innerHTML = '<span class="name"></span> <span class="tag"></span>';
+    left.querySelector('.name').textContent = item.name;
+    left.querySelector('.tag').textContent =
+      item.status === 'ready' ? item.w + ' × ' + item.h + ' px' + (item.bgLum == null ? '' : (opt.mode === 'none' ? ' · 保持原样（不反色）' : (effInvert(item, opt) ? ' · 检测为深底白字，将反色' : ' · 检测为白底黑字，不反色'))) :
+      item.status === 'error' ? '读取失败：' + item.error : '读取中…';
+    const right = document.createElement('div');
+    right.className = 'row';
+    let headTag = null;
+    if (item.status === 'ready' && item.profile) {
+      headTag = document.createElement('span');
+      headTag.className = 'tag';
+      right.appendChild(headTag);
+    }
+    const del = document.createElement('button');
+    del.className = 'ghost';
+    del.textContent = '移除';
+    del.onclick = () => {
+      state.items = state.items.filter(x => x !== item);
+      render();
+      $('#gen').disabled = !state.items.some(i => i.status === 'ready');
+    };
+    right.appendChild(del);
+    hd.appendChild(left); hd.appendChild(right);
+    box.appendChild(hd);
+
+    if (item.status === 'ready' && item.profile) {
+      const edit = document.createElement('div');
+      edit.className = 'cutedit';
+
+      // ---- 左：概览 ----
+      const stripCol = document.createElement('div');
+      const stripBox = document.createElement('div');
+      stripBox.className = 'strip';
+      stripBox.style.height = Math.round(Math.min(680, Math.max(360, window.innerHeight * 0.62))) + 'px';
+      const wrap = document.createElement('div');
+      wrap.className = 'stripWrap';
+      const base = document.createElement('canvas');
+      base.className = 'base';
+      const ov = document.createElement('canvas');
+      ov.className = 'ov';
+      wrap.appendChild(base); wrap.appendChild(ov);
+      stripBox.appendChild(wrap);
+      const stripTop = document.createElement('div');
+      stripTop.className = 'row';
+      stripTop.style.marginBottom = '6px';
+      const rawBtn = document.createElement('button');
+      rawBtn.className = 'ghost mini';
+      const syncRawBtn = () => {
+        rawBtn.textContent = item.overviewRaw ? '看白底' : '看原图';
+        rawBtn.title = item.overviewRaw ? '切回处理后的白底效果' : '临时切到深色原图对照';
+      };
+      syncRawBtn();
+      const hint = document.createElement('div');
+      hint.className = 'muted';
+      hint.style.marginTop = '6px';
+      const syncHint = () => {
+        hint.textContent = item.overviewRaw ? '当前显示：深色原图（仅对照）' : '红线/黄线 = 切线，可直接上下拖动';
+      };
+      syncHint();
+      rawBtn.onclick = () => {
+        item.overviewRaw = !item.overviewRaw;
+        syncRawBtn();
+        syncHint();
+        drawStripBase(item, currentOptions());
+      };
+      stripTop.appendChild(rawBtn);
+      stripCol.appendChild(stripTop);
+      stripCol.appendChild(stripBox);
+      stripCol.appendChild(hint);
+      edit.appendChild(stripCol);
+
+      // ---- 右：放大镜 ----
+      const dcol = document.createElement('div');
+      dcol.className = 'detailcol';
+      const bar = document.createElement('div');
+      bar.className = 'editbar';
+      const mkBtn = (label, title, fn) => {
+        const b = document.createElement('button');
+        b.className = 'ghost mini';
+        b.textContent = label;
+        if (title) b.title = title;
+        b.onclick = fn;
+        return b;
+      };
+      bar.appendChild(mkBtn('＋ 新增切线', '把当前这一页从中间切开（可再拖动微调）', () => {
+        const o = currentOptions();
+        const pages = pagesFor(item, o);
+        if (pages.length < 1) return;
+        const idx = Math.max(0, Math.min(pages.length - 1, item.selCut == null ? 0 : item.selCut));
+        const p = pages[idx];
+        const target = Math.round((p.y0 + p.y1) / 2);
+        ensureManual(item, o);
+        const y = snapToBlank(item, target, 0.25, p.y0 + MIN_PAGE_PX, p.y1 - MIN_PAGE_PX);
+        if (addCutAt(item, o, y)) afterEdit(item);
+      }));
+      bar.appendChild(mkBtn('删除选中', '删除当前黄线（合并相邻两页）', () => {
+        const o = currentOptions();
+        ensureManual(item, o);
+        removeCut(item, o, item.selCut == null ? 0 : item.selCut);
+        afterEdit(item);
+      }));
+      bar.appendChild(mkBtn('−10', '上移 10 px', () => nudgeBy(item, -10)));
+      bar.appendChild(mkBtn('−1', '上移 1 px', () => nudgeBy(item, -1)));
+      bar.appendChild(mkBtn('+1', '下移 1 px', () => nudgeBy(item, 1)));
+      bar.appendChild(mkBtn('+10', '下移 10 px', () => nudgeBy(item, 10)));
+      bar.appendChild(mkBtn('恢复自动切分', '清除这张图的手动切线', () => {
+        item.manualCuts = null;
+        item.selCut = 0;
+        afterEdit(item);
+      }));
+
+      const zoomSel = document.createElement('select');
+      zoomSel.style.width = 'auto';
+      zoomSel.style.fontSize = '12px';
+      zoomSel.style.padding = '5px 8px';
+      [['1', '放大：适应宽度'], ['2', '放大：2 倍'], ['3', '放大：3 倍']].forEach(p => {
+        const o = document.createElement('option');
+        o.value = p[0]; o.textContent = p[1];
+        zoomSel.appendChild(o);
+      });
+      zoomSel.value = String(item.detailZoom || 1);
+      const pan = document.createElement('input');
+      pan.type = 'range'; pan.min = '0'; pan.max = '1000'; pan.value = '500';
+      pan.style.width = '110px';
+      pan.title = '左右位置（放大后使用）';
+      const syncPanVisible = () => { pan.style.display = (item.detailZoom || 1) > 1 ? '' : 'none'; };
+      zoomSel.onchange = () => {
+        item.detailZoom = +zoomSel.value;
+        item.detailCx = null;
+        pan.value = '500';
+        syncPanVisible();
+        drawDetail(item, currentOptions());
+      };
+      pan.oninput = () => {
+        item.detailCx = item.w * (+pan.value / 1000);
+        drawDetail(item, currentOptions());
+      };
+      bar.appendChild(zoomSel);
+      bar.appendChild(pan);
+
+      const info = document.createElement('div');
+      info.className = 'editinfo';
+      const detail = document.createElement('canvas');
+      const dbox = document.createElement('div');
+      dbox.className = 'detailbox';
+      dbox.appendChild(detail);
+      dcol.appendChild(bar);
+      dcol.appendChild(info);
+      dcol.appendChild(dbox);
+      edit.appendChild(dcol);
+      box.appendChild(edit);
+
+      // ---- 缩略图 ----
+      const thumbs = document.createElement('div');
+      thumbs.className = 'thumbs';
+      thumbs.style.marginTop = '14px';
+      box.appendChild(thumbs);
+
+      item._ui = {
+        headTag: headTag,
+        stripBox: stripBox,
+        wrap: wrap,
+        base: base, baseCtx: base.getContext('2d'),
+        ov: ov, ovCtx: ov.getContext('2d'),
+        detail: detail, detailCtx2d: detail.getContext('2d', { willReadFrequently: true }),
+        detailCol: dcol, infoEl: info, thumbs: thumbs,
+        sw: 1, sh: 1, scale: 1,
+      };
+      syncPanVisible();
+      stripBox.addEventListener('scroll', () => { item._stripScroll = stripBox.scrollTop; });
+      attachDrag(ov, item, 'strip');
+      attachDrag(detail, item, 'detail');
+    }
+    list.appendChild(box);
+  }
+
+  // DOM 就位后再测量、绘制
+  for (const item of state.items) {
+    if (item._ui) layoutItem(item, opt);
+  }
+}
+
+function putPixels(ctx, w, h, res) {
+  const img = ctx.createImageData(w, h);
+  const d = img.data;
+  if (res.colors === 3) {
+    for (let i = 0, j = 0, p = 0; i < w * h; i++, j += 3, p += 4) {
+      d[p] = res.pixels[j]; d[p + 1] = res.pixels[j + 1]; d[p + 2] = res.pixels[j + 2]; d[p + 3] = 255;
+    }
+  } else {
+    for (let i = 0, p = 0; i < w * h; i++, p += 4) {
+      const v = res.pixels[i];
+      d[p] = v; d[p + 1] = v; d[p + 2] = v; d[p + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function refreshPreviewAll() {
+  if (state.busy) return;
+  render();
+}
+
+/* --------------------------- 生成与下载 --------------------------- */
+function showDownloadLink(url, filename, size) {
+  const box = $('#dl');
+  if (!box) return;
+  box.innerHTML = '';
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.textContent = `⬇ 手动下载：${filename}（${(size / 1048576).toFixed(1)} MB）`;
+  box.appendChild(link);
+  const tip = document.createElement('div');
+  tip.className = 'muted';
+  tip.style.marginTop = '6px';
+  tip.textContent = '浏览器有时会拦截自动下载：点上面这个按钮即可保存；也可以右键 →“链接存储为…”。';
+  box.appendChild(tip);
+}
+
+function download(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => a.remove(), 1000);
+  showDownloadLink(url, filename, blob.size);
+  setTimeout(() => URL.revokeObjectURL(url), 600000);   // 10 分钟后释放，期间随时可手动另存
+}
+
+function isAsciiSafe(s) {
+  return /^[\x20-\x7E]+$/.test(s) && !/[\/\\:*?"<>|]/.test(s);
+}
+
+/** ZIP 内目录名：能直接用就用原名，否则退回 imageN（并记入对照表） */
+function zipFolderFor(item, index, nameMap) {
+  const base = String(item.name || 'image').replace(/[\/\\:*?"<>|\r\n\t]/g, '_').trim() || 'image';
+  if (isAsciiSafe(base)) return base;
+  const folder = 'image' + (index + 1);
+  if (nameMap && !nameMap.some(m => m[1] === folder)) nameMap.push([base, folder]);
+  return folder;
+}
+
+function canvasToBlob(canvas, type, q) {
+  return new Promise(res => canvas.toBlob(b => res(b), type, q));
+}
+
+async function generate() {
+  if (state.busy) return;
+  const opt = currentOptions();
+  const ready = state.items.filter(i => i.status === 'ready');
+  if (!ready.length) { setStatus('还没有可处理的图片', 'err'); return; }
+  if (!opt.outPng && !opt.outPdf && !opt.outJpg) {
+    setStatus('请至少勾选一种输出格式', 'err');
+    return;
+  }
+  state.busy = true;
+  $('#gen').disabled = true;
+  $('#clear').disabled = true;
+
+  // 总工作量（页数）—— “不打印”的页直接不生成
+  const plan = ready.map(item => ({
+    item,
+    pages: pagesFor(item, opt).filter(p => !isSkipped(item, p)),
+  }));
+  const skippedTotal = ready.reduce((n, item) => n + pagesFor(item, opt).filter(p => isSkipped(item, p)).length, 0);
+  if (skippedTotal) setStatus('（已跳过 ' + skippedTotal + ' 页标记为“不打印”的页）');
+  const totalPages = plan.reduce((s, p) => s + p.pages.length, 0);
+  let done = 0;
+
+  const zipEntries = [];   // {name, data}
+  const pdfPages = [];
+  const nameMap = [];      // 非 ASCII 原文件名 → ASCII 目录名
+  const wantImages = opt.outPng || opt.outJpg;
+
+  try {
+    for (const { item, pages } of plan) {
+      const topt = transformOptFor(item, opt);
+      const canvas = document.createElement('canvas');
+      const pad = Math.max(2, String(pages.length).length);
+      const folder = zipFolderFor(item, state.items.indexOf(item), nameMap);
+
+      for (let idx = 0; idx < pages.length; idx++) {
+        const cut = pages[idx];
+        const ctx = drawPage(item, cut, opt, canvas);
+        const { cw, ch } = pageCanvasSize(item, opt);
+        const id = ctx.getImageData(0, 0, cw, ch);
+        const res = transformPixels(id.data, topt);
+
+        const num = String(idx + 1).padStart(pad, '0');
+
+        if (opt.outPng || opt.outPdf) {
+          const filtered = filterRows(res.pixels, cw, ch, res.colors);
+          const deflated = await deflateBytes(filtered);
+          if (opt.outPng) {
+            zipEntries.push({ name: folder + '/' + folder + '-' + num + '.png', data: buildPngFromDeflated(cw, ch, res.colors, deflated) });
+          }
+          if (opt.outPdf) {
+            pdfPages.push({ width: cw, height: ch, colors: res.colors, data: deflated });
+          }
+        }
+        if (opt.outJpg) {
+          putPixels(ctx, cw, ch, res);
+          const blob = await canvasToBlob(canvas, 'image/jpeg', opt.jpgQ);
+          if (blob) zipEntries.push({ name: folder + '/' + folder + '-' + num + '.jpg', data: new Uint8Array(await blob.arrayBuffer()) });
+        }
+
+        done++;
+        setProgress(done / totalPages);
+        setStatus(`正在处理：${item.name} 第 ${idx + 1}/${pages.length} 页（总进度 ${done}/${totalPages}）`);
+        if (idx % 2 === 1) await tick();
+      }
+    }
+
+    setStatus('正在打包…'); await tick();
+
+    const wantZip = wantImages || (opt.outPng && opt.outPdf);
+    const stamp = new Date().toISOString().slice(0, 10);
+
+    if (wantZip) {
+      if (nameMap.length) {
+        const txt = '为了兼容各种解压工具，ZIP 内的目录名只能用英文/数字。\n对应关系如下：\n\n' +
+          nameMap.map(m => m[1] + '  ←  ' + m[0]).join('\n') + '\n';
+        zipEntries.push({ name: 'file-names.txt', data: new TextEncoder().encode(txt) });
+      }
+      if (opt.outPdf) {
+        const pdf = makePdf(pdfPages, { pageW: opt.pageWmm / 25.4 * 72, pageH: opt.pageHmm / 25.4 * 72 });
+        zipEntries.push({ name: 'print-A4.pdf', data: pdf });
+      }
+      const zip = makeZip(zipEntries, new Date());
+      download(new Blob([zip], { type: 'application/zip' }), `讲义切片-${stamp}.zip`);
+      setStatus(`完成：已下载 ZIP（${zipEntries.length} 个文件，共 ${(zip.length / 1048576).toFixed(1)} MB）。解压后可打印图片，PDF 可直接打开打印。`, '');
+    } else {
+      const pdf = makePdf(pdfPages, { pageW: opt.pageWmm / 25.4 * 72, pageH: opt.pageHmm / 25.4 * 72 });
+      download(new Blob([pdf], { type: 'application/pdf' }), `讲义切片-${stamp}.pdf`);
+      setStatus(`完成：已下载 PDF（共 ${pdfPages.length} 页，${(pdf.length / 1048576).toFixed(1)} MB）。`, '');
+    }
+    setProgress(1);
+  } catch (e) {
+    setStatus('出错了：' + (e && e.message || e), 'err');
+    console.error(e);
+  } finally {
+    state.busy = false;
+    $('#gen').disabled = false;
+    $('#clear').disabled = false;
+    setTimeout(() => setProgress(0), 1500);
+  }
+}
+
+/* --------------------------- 预设 --------------------------- */
+const PRESET_BASE = {
+  orient: 'portrait', margin: '5', scale: '1', strength: 50, window: 20, cscale: 100, jpgq: 92,
+  invert: true, autoinvert: true, smart: true, trim: true, skipblank: true, balancetail: true,
+  snap: true,
+};
+const PRESETS = {
+  rec: {
+    values: { ...PRESET_BASE, mode: 'gray' },
+    hint: '推荐：反色 + 增强灰度、A4 纵向、四周留白 5mm、原图 1:1。平时用这个就行。',
+  },
+  paper: {
+    values: { ...PRESET_BASE, mode: 'gray', cscale: 88 },
+    hint: '省纸：内容缩到 88%，一页装更多，页数更少（字略小一点）。',
+  },
+  ink: {
+    values: { ...PRESET_BASE, mode: 'bw' },
+    hint: '省墨：纯黑白、去掉所有灰阶，打印最省墨。',
+  },
+  white: {
+    values: { ...PRESET_BASE, mode: 'none', autoinvert: false, invert: false, strength: 20 },
+    hint: '原图白底：不反色、只轻微增强，适合本来就是白底黑字的讲义。',
+  },
+};
+
+function markPreset(name) {
+  document.querySelectorAll('.preset').forEach(b => {
+    b.classList.toggle('on', b.dataset.preset === name);
+  });
+}
+
+function applyPreset(name) {
+  const p = PRESETS[name];
+  if (!p) return;
+  const v = p.values;
+  const setV = (id, val) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (el.type === 'checkbox') el.checked = !!val;
+    else el.value = String(val);
+  };
+  Object.keys(v).forEach(k => setV(k, v[k]));
+  // 同步滑杆文字
+  const sync = (id, span) => { const e = document.getElementById(id); const t = document.getElementById(span); if (e && t) t.textContent = e.value; };
+  sync('strength', 'sv'); sync('window', 'wv'); sync('stripw', 'swv'); sync('detailctx', 'dcv');
+  sync('jpgq', 'jv'); sync('cscale', 'csv');
+  const hint = $('#presetHint');
+  if (hint) hint.textContent = p.hint;
+  markPreset(name);
+  if (!state.busy) render();
+}
+
+/* --------------------------- 事件绑定 --------------------------- */
+$('#drop').onclick = () => $('#picker').click();
+$('#picker').onchange = (e) => { addFiles(e.target.files); e.target.value = ''; };
+
+// 整页拖放
+function hasFiles(e) {
+  const t = e.dataTransfer && e.dataTransfer.types;
+  if (!t) return false;
+  for (let i = 0; i < t.length; i++) if (t[i] === 'Files') return true;
+  return false;
+}
+let dragDepth = 0;
+function showCover(on) {
+  const c = $('#dropCover');
+  if (c) c.classList.toggle('show', !!on);
+}
+window.addEventListener('dragenter', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth++;
+  showCover(true);
+});
+window.addEventListener('dragover', (e) => {
+  if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }
+});
+window.addEventListener('dragleave', (e) => {
+  if (!hasFiles(e)) return;
+  dragDepth = Math.max(0, dragDepth - 1);
+  if (!dragDepth) showCover(false);
+});
+window.addEventListener('drop', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  dragDepth = 0;
+  showCover(false);
+  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+    addFiles(e.dataTransfer.files);
+  }
+});
+
+// 粘贴图片（⌘V / Ctrl+V）
+function pasteFileName(type) {
+  const ext = (String(type).split('/')[1] || 'png').replace('jpeg', 'jpg');
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  // 用 ASCII 名字：ZIP 里的中文目录名在部分解压工具里会报错
+  return 'paste-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + '.' + ext;
+}
+window.addEventListener('paste', (e) => {
+  if (!e.clipboardData) return;
+  const files = [];
+  const items = e.clipboardData.items || [];
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (it.kind === 'file' && /^image\//.test(it.type)) {
+      const f = it.getAsFile();
+      if (f) files.push(new File([f], pasteFileName(it.type), { type: it.type }));
+    }
+  }
+  if (files.length) { e.preventDefault(); addFiles(files); }
+});
+
+// 大图预览
+$('#vPrev').onclick = () => { viewerState.idx--; renderViewer(); };
+$('#vNext').onclick = () => { viewerState.idx++; renderViewer(); };
+$('#vOne').onclick = () => {
+  viewerState.one = !viewerState.one;
+  $('#vOne').textContent = viewerState.one ? '适应窗口' : '1:1 实际像素';
+  renderViewer();
+};
+$('#vClose').onclick = closeViewer;
+$('#viewer').addEventListener('click', (e) => {
+  if (e.target.id === 'viewer' || e.target.id === 'vBody') closeViewer();
+});
+window.addEventListener('keydown', (e) => {
+  const v = $('#viewer');
+  if (!v || !v.classList.contains('show')) return;
+  if (e.key === 'Escape') { closeViewer(); e.preventDefault(); }
+  else if (e.key === 'ArrowLeft') { viewerState.idx--; renderViewer(); e.preventDefault(); }
+  else if (e.key === 'ArrowRight') { viewerState.idx++; renderViewer(); e.preventDefault(); }
+});
+
+$('#gen').onclick = generate;
+$('#clear').onclick = () => {
+  state.items = [];
+  const dl = $('#dl'); if (dl) dl.innerHTML = '';
+  $('#list').innerHTML = '';
+  $('#gen').disabled = true;
+  setStatus('等待添加图片…');
+  setProgress(0);
+};
+
+// 预设按钮
+document.querySelectorAll('.preset').forEach(btn => {
+  btn.onclick = () => applyPreset(btn.dataset.preset);
+});
+
+// 选项改变 → 重新计算切页与预览（手动改过就取消预设高亮）
+['mode', 'orient', 'margin', 'scale', 'strength', 'window', 'invert', 'autoinvert', 'smart', 'trim', 'skipblank', 'balancetail', 'stripw', 'detailctx', 'snap', 'cscale']
+  .forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
+      const sync = (a, b) => { const e = document.getElementById(a); const t = document.getElementById(b); if (e && t) t.textContent = e.value; };
+      sync('strength', 'sv'); sync('window', 'wv'); sync('jpgq', 'jv'); sync('stripw', 'swv'); sync('detailctx', 'dcv'); sync('cscale', 'csv');
+      markPreset(null);
+      const hint = $('#presetHint');
+      if (hint) hint.textContent = '已手动调整，预设高亮已取消。';
+      if (!state.busy) render();
+    });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>人站在小车上挥锤敲车 —— 水平动量守恒模拟</title>
+<style>
+  :root{
+    --bg:#0b1017;
+    --bg2:#111a25;
+    --card:#141d29;
+    --card2:#18232f;
+    --line:#26333f;
+    --txt:#e6edf5;
+    --dim:#8fa3b8;
+    --dim2:#5e7288;
+    --blue:#4d9de0;
+    --amber:#f5a623;
+    --green:#3ddc97;
+    --red:#ff6b6b;
+    --violet:#a78bfa;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:radial-gradient(1200px 700px at 20% -10%, #16283a 0%, #0b1017 55%, #070b11 100%);
+    color:var(--txt);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",Roboto,sans-serif;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1440px;margin:0 auto;padding:20px 20px 44px}
+
+  header.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 16px;margin-bottom:16px}
+  header.top h1{font-size:20px;margin:0;letter-spacing:.5px;font-weight:650}
+  header.top .sub{color:var(--dim);font-size:13px}
+  .pill{
+    display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;
+    background:rgba(77,157,224,.13);border:1px solid rgba(77,157,224,.35);color:#9ecbf0;
+  }
+
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+  @media (max-width:1080px){ .layout{grid-template-columns:minmax(0,1fr)} }
+
+  .stage{
+    position:relative;background:linear-gradient(180deg,#0e1620 0%,#0a1119 100%);
+    border:1px solid var(--line);border-radius:16px;overflow:hidden;
+    box-shadow:0 18px 50px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.03);
+  }
+  #scene{display:block;width:100%;aspect-ratio:16/9;min-height:300px;touch-action:none}
+  @media (max-width:1080px){ #scene{aspect-ratio:3/2} }
+  @media (max-width:600px){ #scene{aspect-ratio:4/3} }
+
+  .phaseTag{
+    position:absolute;left:14px;top:12px;display:flex;gap:8px;align-items:center;
+    padding:6px 12px;border-radius:10px;font-size:12.5px;letter-spacing:.4px;
+    background:rgba(10,17,25,.72);border:1px solid rgba(120,160,200,.22);backdrop-filter:blur(6px);
+  }
+  .phaseTag b{font-weight:600}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 10px currentColor}
+
+  .chartBox{margin-top:14px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px 6px}
+  .chartBox .hd{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--dim);margin-bottom:6px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap}
+  .legend i{display:inline-block;width:16px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+  #chart{display:block;width:100%;height:118px}
+
+  aside{display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 15px}
+  .card h2{margin:0 0 12px;font-size:13px;letter-spacing:1.2px;color:var(--dim);text-transform:uppercase;font-weight:600}
+
+  .readout{display:grid;grid-template-columns:1fr auto;gap:7px 10px;font-size:13px}
+  .readout .k{color:var(--dim)}
+  .readout .v{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;font-weight:600}
+  .v.blue{color:var(--blue)} .v.amber{color:var(--amber)} .v.green{color:var(--green)} .v.violet{color:var(--violet)}
+  .hl{background:linear-gradient(90deg,rgba(61,220,151,.14),rgba(61,220,151,0));border-radius:6px;padding:2px 6px;margin:-2px -6px}
+
+  .ctrl{margin-bottom:13px}
+  .ctrl:last-child{margin-bottom:2px}
+  .ctrl .row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--dim);margin-bottom:5px}
+  .ctrl .row b{color:var(--txt);font-family:ui-monospace,Menlo,monospace;font-weight:600}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:3px;
+    background:linear-gradient(90deg,var(--blue),#2b6ea8);outline:none;cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+    background:#eaf3fb;border:3px solid var(--blue);box-shadow:0 2px 8px rgba(0,0,0,.5);cursor:pointer;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:15px;height:15px;border-radius:50%;background:#eaf3fb;border:3px solid var(--blue);cursor:pointer;
+  }
+
+  .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  button{
+    font:inherit;font-size:13px;padding:9px 10px;border-radius:10px;cursor:pointer;
+    background:var(--card2);color:var(--txt);border:1px solid var(--line);transition:.15s;
+  }
+  button:hover{background:#1f2d3c;border-color:#3a4c5e}
+  button.primary{background:linear-gradient(180deg,#2f7fd0,#1f5f9f);border-color:#3f8fd8}
+  button.primary:hover{background:linear-gradient(180deg,#3a8ee0,#266cae)}
+  button.on{background:linear-gradient(180deg,#2c6b52,#1f5240);border-color:#3ddc97;color:#c9ffe8}
+
+  .checks{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;font-size:12.5px;color:var(--dim)}
+  .checks label{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
+  .checks input{accent-color:var(--blue);width:14px;height:14px;cursor:pointer}
+
+  .note{font-size:12.8px;line-height:1.75;color:#b9c9da}
+  .note b{color:var(--txt)}
+  .note .fml{
+    display:block;margin:8px 0;padding:9px 11px;border-radius:9px;
+    background:#0d141d;border:1px solid var(--line);border-left:3px solid var(--blue);
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.3px;color:#cfe4f7;overflow-x:auto;white-space:nowrap;
+  }
+  .note ul{margin:6px 0 0;padding-left:18px}
+  .note li{margin:5px 0}
+  .kbd{font-family:ui-monospace,Menlo,monospace;background:#0d141d;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:12px}
+  footer{margin-top:16px;color:#54677c;font-size:12px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>人站在小车上挥锤敲车</h1>
+    <span class="pill">地面光滑 · 水平动量守恒 · 总动量恒为 0</span>
+    <span class="sub">内力改变不了系统总动量，所以小车只能在原地附近左右往复，绝不可能一路跑掉。</span>
+  </header>
+
+  <div class="layout">
+
+    <!-- ======== 左：画布 + 曲线 ======== -->
+    <div>
+      <div class="stage">
+        <canvas id="scene"></canvas>
+        <div class="phaseTag"><span class="dot" id="phaseDot"></span><span>阶段：<b id="phaseName">—</b></span></div>
+      </div>
+
+      <div class="chartBox">
+        <div class="hd">
+          <span>时间曲线（各自归一化，便于看相位关系）</span>
+          <span class="legend">
+            <span><i style="background:#4d9de0"></i>小车位移 x<sub>车</sub></span>
+            <span><i style="background:#f5a623"></i>锤头水平位移 x<sub>锤</sub></span>
+          </span>
+        </div>
+        <canvas id="chart"></canvas>
+      </div>
+    </div>
+
+    <!-- ======== 右：控制 + 数据 ======== -->
+    <aside>
+      <div class="card">
+        <h2>实时数据</h2>
+        <div class="readout">
+          <span class="k">小车位移 x</span><span class="v blue" id="rX">0.000 m</span>
+          <span class="k">小车速度 v</span><span class="v blue" id="rV">0.000 m/s</span>
+          <span class="k">锤头水平位移</span><span class="v amber" id="rHX">0.000 m</span>
+          <span class="k">锤头水平速度</span><span class="v amber" id="rHV">0.000 m/s</span>
+          <span class="k">锤头合速度</span><span class="v amber" id="rHS">0.000 m/s</span>
+          <span class="k">系统总动量 p<sub>x</sub></span><span class="v green" id="rP">0.000</span>
+          <span class="k">系统质心 x<sub>c</sub></span><span class="v violet" id="rC">0.000 m</span>
+        </div>
+        <div style="margin-top:11px;font-size:11.5px;color:#5e7288;line-height:1.6">
+          绿色两项是守恒量的数值校验：无论怎么敲，总动量恒为 0，质心水平位置一动不动。
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>参数调节</h2>
+        <div class="ctrl">
+          <div class="row"><span>小车质量 M</span><b><span id="lM">25</span> kg</b></div>
+          <input type="range" id="sM" min="10" max="120" step="1" value="25">
+        </div>
+        <div class="ctrl">
+          <div class="row"><span>人的质量 m<sub>人</sub></span><b><span id="lP">60</span> kg</b></div>
+          <input type="range" id="sP" min="30" max="110" step="1" value="60">
+        </div>
+        <div class="ctrl">
+          <div class="row"><span>锤子质量 m<sub>锤</sub></span><b><span id="lH">12</span> kg</b></div>
+          <input type="range" id="sH" min="3" max="40" step="1" value="12">
+        </div>
+        <div class="ctrl">
+          <div class="row"><span>播放速度</span><b><span id="lS">1.00</span> ×</b></div>
+          <input type="range" id="sS" min="0.05" max="2" step="0.05" value="1">
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>播放控制</h2>
+        <div class="btns">
+          <button class="primary" id="btnPlay">暂停</button>
+          <button id="btnReset">重置</button>
+          <button id="btnSlow">慢动作 ×0.2</button>
+          <button id="btnShot">单帧前进</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>显示选项</h2>
+        <div class="checks">
+          <label><input type="checkbox" id="cCM" checked>质心标记</label>
+          <label><input type="checkbox" id="cVec" checked>速度矢量</label>
+          <label><input type="checkbox" id="cTrail" checked>运动轨迹</label>
+          <label><input type="checkbox" id="cGrid" checked>米格网</label>
+          <label><input type="checkbox" id="cPart" checked>撞击特效</label>
+          <label><input type="checkbox" id="cInfo" checked>标注文字</label>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ======== 物理解释 ======== -->
+  <div class="card" style="margin-top:16px">
+    <h2>物理原理</h2>
+    <div class="note">
+      把 <b>小车 + 人 + 锤子</b> 看成一个系统。地面光滑，系统在水平方向不受外力（人的脚蹬车、锤子砸车，全都是内力），所以 <b>水平方向动量守恒</b>。系统从静止出发，于是总动量始终为零：
+      <span class="fml">M·v<sub>车</sub> + m<sub>人</sub>·v<sub>人</sub> + m<sub>锤</sub>·v<sub>锤</sub> = 0 &nbsp;&nbsp;⟹&nbsp;&nbsp; 质心水平位置 x<sub>c</sub> ≡ 常数</span>
+      取质心为原点，人相对车身的水平位移记作 a，锤头相对车身的水平位移记作 h，则小车的位移被完全"锁死"：
+      <span class="fml">x<sub>车</sub> = − [ m<sub>人</sub>·Δa + m<sub>锤</sub>·Δh ] / (M + m<sub>人</sub> + m<sub>锤</sub>)</span>
+      <ul>
+        <li><b>锤子向前挥出（Δh &gt; 0）</b>：分子为正 ⟹ x<sub>车</sub> 为负，小车向<b>后退</b>（反冲）。</li>
+        <li><b>锤子砸中车的立柱瞬间</b>：锤子相对车身停住，此时人、锤、车彼此相对静止，而总动量为零 ⟹ 整个系统<b>立刻静止</b>，小车急刹在原地。</li>
+        <li><b>把锤子往回拉</b>：Δh 减小，小车又向<b>前</b>挪回原处。</li>
+        <li>一敲一拉为一个循环，小车<b>在原位附近往复</b>，净位移永远为零 —— 内力再大也推不动自己。</li>
+      </ul>
+      <div style="margin-top:10px;color:#8fa3b8">
+        注：地面光滑时轮子其实只会平动打滑、不会滚动，画面里为了好看让轮辐跟着转。竖直方向动量不守恒（地面支持力是外力），所以质心会随锤子上下移动，但<b>水平位置始终不动</b>，这正是画面里那条紫色虚线要做的事。
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    提示：<span class="kbd">空格</span> 播放/暂停 · <span class="kbd">R</span> 重置 · <span class="kbd">→</span> 单帧前进。把"锤子质量"调大、"小车质量"调小，可以明显看到小车摆得更远。
+  </footer>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+const DEG = Math.PI/180;
+const clamp = (v,a,b)=> v<a?a:(v>b?b:v);
+const lerp  = (a,b,t)=> a+(b-a)*t;
+
+/* ============================================================
+   1. 系统参数
+   ============================================================ */
+const cfg = {
+  M   : 25,    // 小车质量 kg
+  mp  : 60,    // 人的质量 kg
+  mh  : 12,    // 锤子质量 kg
+  speed: 1     // 播放速度倍率
+};
+const totalMass = ()=> cfg.M + cfg.mp + cfg.mh;
+
+/* ============================================================
+   2. 几何（车体坐标系：原点在车厢底面中心，y 轴向上，地面 y=0）
+   ============================================================ */
+const G = {
+  /* 车厢 */
+  deckTop : 0.58,  deckBot : 0.38,  halfW : 1.20,
+  wheelR  : 0.19,  wheelX  : 0.78,
+  /* 车头立柱（被敲的靶子） */
+  postX0  : 1.02,  postX1  : 1.20,  postTop : 1.16,
+  /* 车尾挡板 */
+  railX0  : -1.20, railX1  : -1.02, railTop : 0.80,
+  /* 人站位 */
+  personX : -0.45,
+  /* 手的轨迹：从"举锤过顶"到"前下方送出" */
+  hand0   : {x:-0.78, y:2.05},
+  hand1   : {x: 0.15, y:1.35},
+  /* 锤柄方向角 ψ：从"竖直向下"量起，向前为正 */
+  psi0    : -135*DEG,   // 柄指向后上方
+  psi1    : -275*DEG,   // 柄几乎水平指向前方
+  L       : 1.03,       // 手到锤头中心的距离
+  headR   : 0.105,      // 锤头半径
+  leanK   : 0.12        // 身体质心随手前移的比例（前倾）
+};
+
+/* ---- 运动学：一切由进度参数 s ∈ [0, SIG_MAX] 描述 ---- */
+const handX = s => lerp(G.hand0.x, G.hand1.x, s);
+const handY = s => lerp(G.hand0.y, G.hand1.y, s);
+const psi   = s => lerp(G.psi0,  G.psi1,  s);
+const headX = s => handX(s) + G.L*Math.sin(psi(s));
+const headY = s => handY(s) - G.L*Math.cos(psi(s));
+const leanX = s => G.leanK*(handX(s) - handX(0));   // 身体质心相对车身的位移
+
+/* ---- 核心约束：质心水平位置恒为常数 ⟹ 小车位移被锁死 ---- */
+function cartX(s){
+  return -( cfg.mp*leanX(s) + cfg.mh*(headX(s) - headX(0)) ) / totalMass();
+}
+
+/* 数值导数（同一个函数既用于"算速度"，也用于"算动量"，因此动量精确为零） */
+const DH = 1e-5;
+const dds = (f,s)=> (f(s+DH) - f(s-DH)) / (2*DH);
+
+/* ============================================================
+   3. 时间轴（预备 → 挥锤 → 撞击 → 静止 → 拉回）
+   ============================================================ */
+const T = { prep:0.35, swing:0.42, impact:0.009, hold:0.25, recover:0.60 };
+T.total = T.prep + T.swing + T.impact + T.hold + T.recover;
+
+/* 撞击段起始角速度与挥锤段末角速度连续 ⟹ EPS = 2·T_imp/(5·T_swing) */
+const EPS = 2*T.impact/(5*T.swing);
+const SIG_MAX = 1 + EPS;
+
+function phaseAt(t){
+  const tc = ((t % T.total) + T.total) % T.total;
+  if (tc < T.prep)  return { name:'预备蓄力', color:'#8fa3b8', s:0, sd:0 };
+
+  let a = tc - T.prep;
+  if (a < T.swing){                       // σ = u²  匀加速式挥出
+    const u = a/T.swing;
+    return { name:'挥锤', color:'#f5a623', s:u*u, sd:2*u/T.swing };
+  }
+  a -= T.swing;
+  if (a < T.impact){                      // 缓冲减速到 0（有限的撞击时间）
+    const w = a/T.impact, k = 1-Math.pow(1-w,5);
+    return { name:'撞击', color:'#ff6b6b', s:1+EPS*k, sd:5*EPS*Math.pow(1-w,4)/T.impact };
+  }
+  a -= T.impact;
+  if (a < T.hold)   return { name:'静止', color:'#3ddc97', s:SIG_MAX, sd:0 };
+
+  a -= T.hold;                            // 平滑拉回
+  const u = a/T.recover, sm = u*u*(3-2*u);
+  return { name:'拉回', color:'#4d9de0', s:SIG_MAX*(1-sm), sd:-SIG_MAX*6*u*(1-u)/T.recover };
+}
+
+/* ============================================================
+   4. 每帧状态（速度严格由动量守恒反解，保证 p_x ≡ 0）
+   ============================================================ */
+function computeState(t){
+  const ph = phaseAt(t);
+  const s = ph.s, sd = ph.sd;
+
+  const x     = cartX(s);                        // 小车位移
+  const lean  = leanX(s);                        // 人质心相对车身
+  const vLean = dds(leanX, s)*sd;
+  const vhx   = dds(headX, s)*sd;                // 锤头水平速度（车身系）
+  const vhy   = dds(headY, s)*sd;                // 锤头竖直速度（车身系）
+
+  // 由 M·v + m人(v+vLean) + m锤(v+vhx) = 0 解出小车速度
+  const v = -( cfg.mp*vLean + cfg.mh*vhx ) / totalMass();
+
+  const pCart   = cfg.M  * v;
+  const pPerson = cfg.mp * (v + vLean);
+  const pHammer = cfg.mh * (v + vhx);
+
+  // 质心水平位置（对地）
+  const xc = ( cfg.M*x + cfg.mp*(x + G.personX + lean) + cfg.mh*(x + headX(s)) ) / totalMass();
+
+  return { ph, s, x, v, lean, vLean,
+           hx:headX(s), hy:headY(s), vhx, vhy, vhGround:v+vhx,
+           pTotal:pCart+pPerson+pHammer, xc,
+           hand:{x:handX(s), y:handY(s)} };
+}
+
+/* 理论极值（用于绘图定标） */
+const X_MIN = cartX(1), X_MAX = cartX(0);
+function hammerMinMax(){
+  let mn=Infinity, mx=-Infinity;
+  for(let i=0;i<=200;i++){ const v=headX(1.05*i/200); if(v<mn)mn=v; if(v>mx)mx=v; }
+  return [mn,mx];
+}
+
+/* ============================================================
+   5. 画布与坐标变换
+   ============================================================ */
+const canvas = document.getElementById('scene');
+const ctx = canvas.getContext('2d');
+let W=0, H=0, scale=140, groundY=0, camX=-0.15;
+
+function resize(){
+  const r = canvas.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  W = Math.max(300, r.width); H = Math.max(220, r.height);
+  canvas.width  = Math.round(W*dpr);
+  canvas.height = Math.round(H*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+
+  const worldW = 6.0, worldH = 3.55;
+  scale = Math.min(W/worldW, H/worldH);
+  groundY = H - Math.max(46, H*0.115);
+  camX = -0.15;
+}
+const SX = wx => W/2 + (wx - camX)*scale;
+const SY = wy => groundY - wy*scale;
+
+function rr(x,y,w,h,r){                       // 圆角矩形路径（屏幕坐标）
+  r = Math.min(r, Math.abs(w)/2, Math.abs(h)/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+function arrow(x1,y1,x2,y2,color,width){      // 屏幕坐标箭头
+  const ang = Math.atan2(y2-y1, x2-x1);
+  ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=width; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  const hl = width*3.2;
+  ctx.beginPath();
+  ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-hl*Math.cos(ang-0.42), y2-hl*Math.sin(ang-0.42));
+  ctx.lineTo(x2-hl*Math.cos(ang+0.42), y2-hl*Math.sin(ang+0.42));
+  ctx.closePath(); ctx.fill();
+}
+
+/* ============================================================
+   6. 场景绘制
+   ============================================================ */
+function drawGround(){
+  const y = SY(0);
+  const g = ctx.createLinearGradient(0,y,0,H);
+  g.addColorStop(0,'#18222e'); g.addColorStop(1,'#0a0f16');
+  ctx.fillStyle=g; ctx.fillRect(0,y,W,H-y);
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0,y,W,H-y); ctx.clip();
+  ctx.strokeStyle='rgba(77,157,224,.20)'; ctx.lineWidth=1;
+  for(let x=-H; x<W+H; x+=13){
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+(H-y),H); ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.strokeStyle='#4d9de0'; ctx.lineWidth=2.2;
+  ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  // 光滑地面的反光
+  ctx.strokeStyle='rgba(160,215,255,.16)'; ctx.lineWidth=6;
+  ctx.beginPath(); ctx.moveTo(0,y-4); ctx.lineTo(W,y-4); ctx.stroke();
+}
+
+function drawGrid(){
+  ctx.save();
+  ctx.strokeStyle='rgba(120,160,200,.10)'; ctx.lineWidth=1;
+  ctx.setLineDash([3,5]);
+  for(let wx=-8; wx<=8; wx++){
+    const px = SX(wx);
+    if(px<0||px>W) continue;
+    ctx.beginPath(); ctx.moveTo(px,SY(0)); ctx.lineTo(px,0); ctx.stroke();
+  }
+  for(let wy=1; wy<=4; wy++){
+    const py = SY(wy);
+    if(py<0) continue;
+    ctx.beginPath(); ctx.moveTo(0,py); ctx.lineTo(W,py); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* --- 小车 --- */
+function drawCart(cx, cartV){
+  const g = G;
+
+  // 影子
+  ctx.save();
+  ctx.globalAlpha=.35; ctx.fillStyle='#000';
+  ctx.beginPath();
+  ctx.ellipse(SX(cx), SY(0)+4, g.halfW*scale*0.95, 7, 0, 0, Math.PI*2);
+  ctx.fill(); ctx.restore();
+
+  // 轮子
+  const spin = cx/ (g.wheelR||0.19);   // 视觉滚动
+  for(const wx of [-g.wheelX, g.wheelX]){
+    const px = SX(cx+wx), py = SY(g.wheelR), r = g.wheelR*scale;
+    const grd = ctx.createRadialGradient(px-r*.3,py-r*.3,r*.15,px,py,r);
+    grd.addColorStop(0,'#4b5b6e'); grd.addColorStop(1,'#1d2632');
+    ctx.beginPath(); ctx.arc(px,py,r,0,7); ctx.fillStyle=grd; ctx.fill();
+    ctx.lineWidth=Math.max(2,r*.13); ctx.strokeStyle='#8ea6c0'; ctx.stroke();
+    ctx.save(); ctx.translate(px,py); ctx.rotate(spin);
+    ctx.strokeStyle='rgba(190,215,240,.42)'; ctx.lineWidth=Math.max(1.4,r*.10);
+    for(let k=0;k<3;k++){
+      ctx.beginPath(); ctx.moveTo(-r*.72,0); ctx.lineTo(r*.72,0); ctx.stroke();
+      ctx.rotate(Math.PI/3);
+    }
+    ctx.restore();
+    ctx.beginPath(); ctx.arc(px,py,r*.20,0,7); ctx.fillStyle='#c6d8ea'; ctx.fill();
+  }
+
+  // 车厢
+  const x0 = SX(cx+g.railX0), w = (g.halfW*2)*scale;
+  const yTop = SY(g.deckTop), hDeck = (g.deckTop-g.deckBot)*scale;
+  const grd = ctx.createLinearGradient(0,yTop,0,yTop+hDeck);
+  grd.addColorStop(0,'#7c93ab'); grd.addColorStop(.5,'#5d738a'); grd.addColorStop(1,'#3d4e60');
+  ctx.fillStyle=grd; rr(x0,yTop,w,hDeck,5); ctx.fill();
+  ctx.strokeStyle='#9fb6cd'; ctx.lineWidth=1.4; ctx.stroke();
+  // 车厢高光
+  ctx.fillStyle='rgba(255,255,255,.16)';
+  rr(x0+3,yTop+2,w-6,Math.max(2,hDeck*0.20),3); ctx.fill();
+
+  // 车尾挡板
+  const rx0=SX(cx+g.railX0), rw=(g.railX1-g.railX0)*scale;
+  const ry=SY(g.railTop), rh=(g.railTop-g.deckTop)*scale;
+  ctx.fillStyle='#54697f'; rr(rx0,ry,rw,rh,4); ctx.fill();
+  ctx.strokeStyle='#a8bed4'; ctx.lineWidth=1.2; ctx.stroke();
+
+  // 车头立柱（靶子）
+  const px0=SX(cx+g.postX0), pw=(g.postX1-g.postX0)*scale;
+  const py=SY(g.postTop), ph=(g.postTop-g.deckTop)*scale;
+  const pg=ctx.createLinearGradient(px0,0,px0+pw,0);
+  pg.addColorStop(0,'#b98a52'); pg.addColorStop(.45,'#e0b177'); pg.addColorStop(1,'#8a6337');
+  ctx.fillStyle=pg; rr(px0,py,pw,ph,3); ctx.fill();
+  ctx.strokeStyle='#f0d0a0'; ctx.lineWidth=1.2; ctx.stroke();
+  // 木纹
+  ctx.save(); ctx.beginPath(); rr(px0,py,pw,ph,3); ctx.clip();
+  ctx.strokeStyle='rgba(90,60,30,.35)'; ctx.lineWidth=1;
+  for(let i=1;i<4;i++){ ctx.beginPath(); ctx.moveTo(px0+pw*i/4,py); ctx.lineTo(px0+pw*i/4,py+ph); ctx.stroke(); }
+  ctx.restore();
+
+  // 撞击凹陷
+  if(impactMark>0){
+    ctx.save(); ctx.globalAlpha=Math.min(1,impactMark);
+    ctx.fillStyle='rgba(255,240,180,.85)';
+    ctx.beginPath(); ctx.arc(SX(cx+g.postX0+pw*0.72), SY(g.postTop)+2, 4+8*impactMark, 0, 7); ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* --- 人 --- */
+function drawPerson(cx, st){
+  const g = G;
+  const feetY = g.deckTop, bx = g.personX, lean = st.lean;
+
+  const hipX = bx + lean*0.50, hipY = feetY + 0.82;
+  const shX  = bx + lean*1.00, shY  = feetY + 1.32;
+  const hdX  = shX + lean*0.15, hdY = shY + 0.30;
+
+  const wx = (x,y)=>({x:SX(cx+x), y:SY(y)});
+
+  // 影子
+  ctx.save(); ctx.globalAlpha=.28; ctx.fillStyle='#000';
+  ctx.beginPath(); ctx.ellipse(SX(cx+bx), SY(feetY)+3, 26, 6, 0, 0, 7); ctx.fill();
+  ctx.restore();
+
+  // 腿
+  const hip = wx(hipX,hipY), f1 = wx(bx-0.13, feetY), f2 = wx(bx+0.13, feetY);
+  const knee = (f)=>({ x:(hip.x+f.x)/2 + 7, y:(hip.y+f.y)/2 });
+  ctx.lineCap='round';
+  ctx.strokeStyle='#2f4a63'; ctx.lineWidth=Math.max(7,0.115*scale);
+  for(const f of [f1,f2]){
+    const k = knee(f);
+    ctx.beginPath(); ctx.moveTo(hip.x,hip.y); ctx.lineTo(k.x,k.y); ctx.lineTo(f.x,f.y); ctx.stroke();
+  }
+  // 鞋
+  ctx.strokeStyle='#1c2c3c'; ctx.lineWidth=Math.max(6,0.075*scale);
+  for(const f of [f1,f2]){ ctx.beginPath(); ctx.moveTo(f.x-8,f.y); ctx.lineTo(f.x+9,f.y); ctx.stroke(); }
+
+  // 躯干
+  const sh = wx(shX,shY);
+  ctx.lineCap='round';
+  ctx.strokeStyle='#3f6f9e'; ctx.lineWidth=Math.max(16,0.30*scale);
+  ctx.beginPath(); ctx.moveTo(hip.x,hip.y); ctx.lineTo(sh.x,sh.y); ctx.stroke();
+  ctx.strokeStyle='#5b93c7'; ctx.lineWidth=Math.max(10,0.19*scale);
+  ctx.beginPath(); ctx.moveTo(hip.x,hip.y); ctx.lineTo(sh.x,sh.y); ctx.stroke();
+
+  // 头
+  const hd = wx(hdX,hdY), hr = 0.145*scale;
+  ctx.beginPath(); ctx.arc(hd.x,hd.y,hr,0,7);
+  const hg = ctx.createRadialGradient(hd.x-hr*.35,hd.y-hr*.4,hr*.15,hd.x,hd.y,hr);
+  hg.addColorStop(0,'#ffe0c4'); hg.addColorStop(1,'#d9a271');
+  ctx.fillStyle=hg; ctx.fill();
+  ctx.strokeStyle='#a9764c'; ctx.lineWidth=1.4; ctx.stroke();
+  // 安全帽
+  ctx.beginPath();
+  ctx.arc(hd.x,hd.y-hr*0.12,hr*1.06,Math.PI*1.06,Math.PI*1.94);
+  ctx.lineTo(hd.x+hr*1.10,hd.y-hr*0.10); ctx.lineTo(hd.x-hr*1.10,hd.y-hr*0.10);
+  ctx.closePath();
+  ctx.fillStyle='#f0b429'; ctx.fill();
+  ctx.strokeStyle='#c98f10'; ctx.lineWidth=1.2; ctx.stroke();
+
+  // 手臂：肩 → 肘 → 手（两骨 IK）
+  const hand = wx(st.hand.x, st.hand.y);
+  const dx = hand.x-sh.x, dy = hand.y-sh.y;
+  let dist = Math.hypot(dx,dy);
+  const a1 = 0.40*scale, b1 = 0.38*scale;
+  const dc = clamp(dist, Math.abs(a1-b1)+1, a1+b1-1);
+  const cosA = clamp((a1*a1+dc*dc-b1*b1)/(2*a1*dc), -1, 1);
+  const A = Math.acos(cosA), base = Math.atan2(dy,dx), ang = base - A;
+  const el = { x: sh.x + a1*Math.cos(ang), y: sh.y + a1*Math.sin(ang) };
+
+  ctx.strokeStyle='#4b7fb0'; ctx.lineWidth=Math.max(8,0.105*scale);
+  ctx.beginPath(); ctx.moveTo(sh.x,sh.y); ctx.lineTo(el.x,el.y); ctx.lineTo(hand.x,hand.y); ctx.stroke();
+  ctx.strokeStyle='#77aede'; ctx.lineWidth=Math.max(4,0.055*scale);
+  ctx.beginPath(); ctx.moveTo(sh.x,sh.y); ctx.lineTo(el.x,el.y); ctx.lineTo(hand.x,hand.y); ctx.stroke();
+  // 手
+  ctx.beginPath(); ctx.arc(hand.x,hand.y,Math.max(4,0.055*scale),0,7);
+  ctx.fillStyle='#e8b98f'; ctx.fill();
+}
+
+/* --- 锤子 --- */
+function drawHammer(cx, st){
+  const hx = SX(cx+st.hx), hy = SY(st.hy);
+  const px = SX(cx+st.hand.x), py = SY(st.hand.y);
+  const ang = Math.atan2(hy-py, hx-px);
+  const Lp = Math.hypot(hx-px, hy-py);
+
+  ctx.save();
+  ctx.translate(px,py); ctx.rotate(ang);
+
+  // 木柄
+  const handleW = Math.max(4, 0.052*scale);
+  ctx.lineCap='round';
+  ctx.strokeStyle='#6b4a26'; ctx.lineWidth=handleW+2;
+  ctx.beginPath(); ctx.moveTo(-0.05*scale,0); ctx.lineTo(Lp+0.06*scale,0); ctx.stroke();
+  const hg = ctx.createLinearGradient(0,-handleW/2,0,handleW/2);
+  hg.addColorStop(0,'#d9a86a'); hg.addColorStop(.5,'#b98a52'); hg.addColorStop(1,'#8a6337');
+  ctx.strokeStyle=hg; ctx.lineWidth=handleW;
+  ctx.beginPath(); ctx.moveTo(-0.05*scale,0); ctx.lineTo(Lp+0.06*scale,0); ctx.stroke();
+
+  // 锤头（垂直于柄）
+  const hl = 0.17*scale, hw = 0.155*scale;   // 半长、半宽
+  const g2 = ctx.createLinearGradient(0,-hl,0,hl);
+  g2.addColorStop(0,'#93a6ba'); g2.addColorStop(.35,'#e2ecf6'); g2.addColorStop(.6,'#8798aa'); g2.addColorStop(1,'#4a5a6c');
+  ctx.fillStyle=g2;
+  rr(Lp-hw, -hl, hw*2, hl*2, Math.min(6,hw*0.35)); ctx.fill();
+  ctx.strokeStyle='#cfdcea'; ctx.lineWidth=1.4; ctx.stroke();
+  // 打击面高光
+  ctx.fillStyle='rgba(255,255,255,.55)';
+  rr(Lp-hw*0.75, -hl*0.92, hw*0.30, hl*1.84, 2); ctx.fill();
+  ctx.restore();
+}
+
+/* --- 质心与参考线 --- */
+function drawReference(st){
+  const topY = Math.max(24, SY(3.12));   // 竖直参考线顶端（夹取在画布内）
+
+  // 出发点
+  const px0 = SX(0);
+  ctx.save();
+  ctx.strokeStyle='rgba(143,163,184,.45)'; ctx.lineWidth=1.2; ctx.setLineDash([5,6]);
+  ctx.beginPath(); ctx.moveTo(px0, SY(0)); ctx.lineTo(px0, topY+16); ctx.stroke();
+  ctx.restore();
+
+  // 固定的质心竖线
+  const CM0 = ( cfg.mp*G.personX + cfg.mh*headX(0) ) / totalMass();
+  const pxc = SX(CM0);
+  ctx.save();
+  ctx.strokeStyle='rgba(167,139,250,.75)'; ctx.lineWidth=1.6; ctx.setLineDash([7,6]);
+  ctx.beginPath(); ctx.moveTo(pxc, SY(0)); ctx.lineTo(pxc, topY); ctx.stroke();
+  ctx.restore();
+
+  if(document.getElementById('cCM').checked){
+    // 各分质心
+    const dots = [
+      { x: st.x,                       y: 0.48,                       c:'#4d9de0', r:4.5 }, // 车
+      { x: st.x+G.personX+st.lean,     y: G.deckTop+1.05,             c:'#3ddc97', r:4.5 }, // 人
+      { x: st.x+st.hx,                 y: st.hy,                      c:'#f5a623', r:4.5 }  // 锤
+    ];
+    for(const d of dots){
+      ctx.beginPath(); ctx.arc(SX(d.x), SY(d.y), d.r, 0, 7);
+      ctx.fillStyle=d.c; ctx.fill();
+      ctx.strokeStyle='rgba(255,255,255,.85)'; ctx.lineWidth=1.2; ctx.stroke();
+    }
+    // 质心连线
+    ctx.save(); ctx.setLineDash([3,4]); ctx.lineWidth=1.1; ctx.strokeStyle='rgba(167,139,250,.55)';
+    const cyPerson = G.deckTop+1.05, cyHam = st.hy;
+    ctx.beginPath();
+    ctx.moveTo(SX(st.x),        SY(0.48));
+    ctx.lineTo(SX(st.x+G.personX+st.lean), SY(cyPerson));
+    ctx.lineTo(SX(st.x+st.hx),  SY(cyHam));
+    ctx.stroke(); ctx.restore();
+
+    // 系统质心
+    const cyc = ( cfg.M*0.48 + cfg.mp*cyPerson + cfg.mh*cyHam ) / totalMass();
+    ctx.beginPath(); ctx.arc(pxc, SY(cyc), 7.5, 0, 7);
+    ctx.fillStyle='#a78bfa'; ctx.fill();
+    ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+    ctx.beginPath(); ctx.arc(pxc, SY(cyc), 13, 0, 7);
+    ctx.strokeStyle='rgba(167,139,250,.45)'; ctx.lineWidth=1.4; ctx.stroke();
+  }
+
+  if(document.getElementById('cInfo').checked){
+    ctx.save();
+    ctx.font='600 12px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.textAlign='center';
+    ctx.fillStyle='rgba(167,139,250,.95)';
+    ctx.fillText('系统质心（水平方向永不动）', pxc, topY-8);
+    ctx.fillStyle='rgba(143,163,184,.8)';
+    ctx.fillText('出发点 x=0', px0, Math.max(topY+30, SY(2.9)-8));
+    ctx.fillStyle='rgba(120,180,235,.85)';
+    ctx.textAlign='right';
+    ctx.font='600 12.5px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillText('光滑水平面（无摩擦）', W-16, SY(0)+22);
+    ctx.restore();
+  }
+}
+
+/* --- 速度矢量 --- */
+function drawVectors(st){
+  if(!document.getElementById('cVec').checked) return;
+  // 三者的速率量级差别很大（小车 ~1.5，锤头 ~15），分别定标：米 / (米·秒⁻¹)
+  const KS = 0.42, KP = 0.42, KH = 0.050;
+
+  // 小车速度
+  if(Math.abs(st.v) > 0.02){
+    const y = SY(G.deckTop+0.10);
+    arrow(SX(st.x), y, SX(st.x + st.v*KS), y, '#4d9de0', 3);
+  }
+  // 人的速度（随车平动 + 自身前倾）
+  const vp = st.v + st.vLean;
+  if(Math.abs(vp) > 0.02){
+    const y = SY(G.deckTop+1.05);
+    arrow(SX(st.x+G.personX+st.lean), y, SX(st.x+G.personX+st.lean + vp*KP), y, '#3ddc97', 3);
+  }
+  // 锤头速度（水平 + 竖直合成）
+  const vh = st.v + st.vhx, vy = st.vhy;
+  if(Math.hypot(vh,vy) > 0.05){
+    const x1 = SX(st.x+st.hx), y1 = SY(st.hy);
+    arrow(x1, y1, x1 + vh*KH*scale, y1 - vy*KH*scale, '#f5a623', 3.2);
+  }
+}
+
+/* --- 起点幽灵 + 位移标尺 --- */
+function drawTrail(st){
+  if(!document.getElementById('cTrail').checked) return;
+  const g = G;
+
+  // 起点处的幽灵车（虚线轮廓），一眼看出车滑走了多少
+  ctx.save();
+  ctx.setLineDash([5,5]); ctx.lineWidth=1.4;
+  ctx.strokeStyle='rgba(143,163,184,.45)';
+  rr(SX(g.railX0), SY(g.deckTop), (g.halfW*2)*scale, (g.deckTop-g.deckBot)*scale, 5);
+  ctx.stroke();
+  for(const wx of [-g.wheelX, g.wheelX]){
+    ctx.beginPath(); ctx.arc(SX(wx), SY(g.wheelR), g.wheelR*scale, 0, 7); ctx.stroke();
+  }
+  ctx.restore();
+
+  // 地面上的位移标尺
+  const y = SY(-0.155), xa = SX(0), xb = SX(st.x);
+  ctx.save();
+  ctx.strokeStyle='rgba(77,157,224,.9)'; ctx.lineWidth=2; ctx.lineCap='butt';
+  ctx.beginPath(); ctx.moveTo(xa,y); ctx.lineTo(xb,y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(xa,y-7); ctx.lineTo(xa,y+7); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(xb,y-7); ctx.lineTo(xb,y+7); ctx.stroke();
+  if(Math.abs(st.x) > 0.02){
+    ctx.font='600 11.5px ui-monospace,Menlo,Consolas,monospace';
+    ctx.fillStyle='#8ecbff'; ctx.textAlign='center';
+    ctx.fillText('位移 '+st.x.toFixed(3)+' m', (xa+xb)/2, Math.min(y+22, H-5));
+  }
+  ctx.restore();
+}
+
+/* --- 撞击粒子与冲击波 --- */
+let particles = [], shock = null, shake = 0, impactMark = 0;
+function spawnImpact(st){
+  const cxw = st.x + G.postX0 + (G.postX1-G.postX0)*0.72;
+  const cyw = G.postTop;
+  shock = { x:cxw, y:cyw, r:0, life:1 };
+  shake = 1;
+  impactMark = 1;
+  if(!document.getElementById('cPart').checked) return;
+  for(let i=0;i<26;i++){
+    const a = (-0.15 - Math.random()*1.0) * Math.PI;   // 向上散开
+    const sp = 1.2 + Math.random()*3.4;
+    particles.push({
+      x:cxw, y:cyw,
+      vx:Math.cos(a)*sp*0.75 + 0.8, vy:-Math.abs(Math.sin(a))*sp,
+      life:1, decay:1.6+Math.random()*1.6,
+      size:1.6+Math.random()*2.6,
+      color: Math.random()<0.55 ? '#ffd479' : (Math.random()<0.5?'#ff9d4d':'#e8eef6')
+    });
+  }
+}
+function updateEffects(dt){
+  for(const p of particles){
+    p.vy -= 9.8*dt; p.x += p.vx*dt; p.y += p.vy*dt;
+    p.vx *= (1-1.6*dt); p.life -= p.decay*dt;
+  }
+  particles = particles.filter(p=>p.life>0 && p.y>-0.2);
+  if(shock){ shock.r += dt*5.5; shock.life -= dt*2.6; if(shock.life<=0) shock=null; }
+  shake = Math.max(0, shake - dt*6.5);
+  impactMark = Math.max(0, impactMark - dt*2.2);
+}
+function drawEffects(){
+  if(shock){
+    ctx.save();
+    ctx.globalAlpha = Math.max(0,shock.life)*0.8;
+    ctx.strokeStyle='#ffe6a3'; ctx.lineWidth=3*(1-shock.life)+1;
+    ctx.beginPath(); ctx.arc(SX(shock.x), SY(shock.y), shock.r*scale*0.28, 0, 7); ctx.stroke();
+    ctx.restore();
+  }
+  if(!document.getElementById('cPart').checked) return;
+  ctx.save();
+  for(const p of particles){
+    ctx.globalAlpha = Math.max(0,p.life);
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(SX(p.x), SY(p.y), p.size, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* ============================================================
+   7. 渲染主函数
+   ============================================================ */
+function render(st){
+  ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0);
+  ctx.clearRect(0,0,W,H);
+
+  // 背景
+  const bg = ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#101a26'); bg.addColorStop(1,'#0a1119');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+
+  ctx.save();
+  if(shake>0.01){
+    const m = shake*shake*7;
+    ctx.translate((Math.random()-0.5)*m, (Math.random()-0.5)*m);
+  }
+
+  if(document.getElementById('cGrid').checked) drawGrid();
+  drawGround();
+  drawReference(st);
+  drawTrail(st);
+
+  drawCart(st.x, st.v);
+  drawPerson(st.x, st);
+  drawHammer(st.x, st);
+  drawEffects();
+  drawVectors(st);
+
+  ctx.restore();
+}
+
+/* ============================================================
+   8. 时间曲线
+   ============================================================ */
+const chart = document.getElementById('chart');
+const cx2 = chart.getContext('2d');
+let hist = [], cw=0, ch=0;
+const HMM = hammerMinMax();
+
+function resizeChart(){
+  const r = chart.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio||1,2);
+  cw = r.width; ch = r.height;
+  chart.width = Math.round(cw*dpr); chart.height = Math.round(ch*dpr);
+  cx2.setTransform(dpr,0,0,dpr,0,0);
+}
+function pushHist(t, x, hx){
+  hist.push({t,x,hx});
+  while(hist.length && hist[0].t < t-7) hist.shift();
+}
+function drawChart(){
+  cx2.clearRect(0,0,cw,ch);
+  cx2.fillStyle='#0d141d'; cx2.fillRect(0,0,cw,ch);
+
+  // 网格
+  cx2.strokeStyle='rgba(120,160,200,.13)'; cx2.lineWidth=1;
+  for(let i=1;i<4;i++){
+    const y = ch*i/4;
+    cx2.beginPath(); cx2.moveTo(0,y); cx2.lineTo(cw,y); cx2.stroke();
+  }
+
+  if(hist.length<2) return;
+  const t0 = hist[0].t, t1 = hist[hist.length-1].t;
+  const span = Math.max(1.2, t1-t0);
+  const PX = t => (t-t0)/span*cw;
+  const PY = v => ch-4 - clamp(v,0,1)*(ch-10);
+
+  const normX  = v => (v - X_MIN)/(X_MAX - X_MIN || 1);
+  const normH  = v => (v - HMM[0])/(HMM[1]-HMM[0] || 1);
+
+  // 小车
+  cx2.beginPath();
+  hist.forEach((p,i)=>{ const X=PX(p.t), Y=PY(normX(p.x)); i?cx2.lineTo(X,Y):cx2.moveTo(X,Y); });
+  cx2.strokeStyle='#4d9de0'; cx2.lineWidth=2; cx2.stroke();
+  cx2.lineTo(PX(hist[hist.length-1].t), ch); cx2.lineTo(PX(hist[0].t), ch); cx2.closePath();
+  cx2.fillStyle='rgba(77,157,224,.13)'; cx2.fill();
+
+  // 锤头
+  cx2.beginPath();
+  hist.forEach((p,i)=>{ const X=PX(p.t), Y=PY(normH(p.hx)); i?cx2.lineTo(X,Y):cx2.moveTo(X,Y); });
+  cx2.strokeStyle='#f5a623'; cx2.lineWidth=1.8; cx2.setLineDash([]); cx2.stroke();
+
+  // 当前点
+  const last = hist[hist.length-1];
+  cx2.beginPath(); cx2.arc(PX(last.t), PY(normX(last.x)), 3.4, 0, 7);
+  cx2.fillStyle='#8ecbff'; cx2.fill();
+  cx2.beginPath(); cx2.arc(PX(last.t), PY(normH(last.hx)), 3.4, 0, 7);
+  cx2.fillStyle='#ffd08a'; cx2.fill();
+}
+
+/* ============================================================
+   9. 主循环
+   ============================================================ */
+let simT = 0, playing = true, lastWall = performance.now()/1000, lastPhase = '';
+const $ = id => document.getElementById(id);
+
+function fmt(v,n=3){
+  const s = v.toFixed(n);
+  return (s === '-'+(0).toFixed(n)) ? (0).toFixed(n) : s;
+}
+
+function updateHUD(st){
+  $('rX').textContent  = fmt(st.x) + ' m';
+  $('rV').textContent  = fmt(st.v) + ' m/s';
+  $('rHX').textContent = fmt(st.hx) + ' m';
+  $('rHV').textContent = fmt(st.vhGround) + ' m/s';
+  $('rHS').textContent = fmt(Math.hypot(st.vhGround, st.vhy)) + ' m/s';
+  $('rP').textContent  = fmt(Math.abs(st.pTotal)<5e-4?0:st.pTotal) + ' kg·m/s';
+  $('rC').textContent  = fmt(st.xc) + ' m';
+  $('phaseName').textContent = st.ph.name;
+  $('phaseDot').style.background = st.ph.color;
+  $('phaseDot').style.color = st.ph.color;
+}
+
+function tick(){
+  const now = performance.now()/1000;
+  let dt = Math.min(0.05, now-lastWall); lastWall = now;
+
+  if(playing) simT += dt*cfg.speed;
+
+  const st = computeState(simT);
+
+  // 撞击瞬间
+  const before = computeState(Math.max(0, simT - dt*cfg.speed - 1e-4));
+  if(before.ph.name !== '撞击' && st.ph.name === '撞击') spawnImpact(st);
+
+  updateEffects(dt);
+  pushHist(now, st.x, st.hx);
+
+  render(st);
+  drawChart();
+  updateHUD(st);
+
+  requestAnimationFrame(tick);
+}
+
+/* ============================================================
+   10. 交互
+   ============================================================ */
+$('sM').addEventListener('input', e=>{ cfg.M = +e.target.value; $('lM').textContent = cfg.M; });
+$('sP').addEventListener('input', e=>{ cfg.mp = +e.target.value; $('lP').textContent = cfg.mp; });
+$('sH').addEventListener('input', e=>{ cfg.mh = +e.target.value; $('lH').textContent = cfg.mh; });
+$('sS').addEventListener('input', e=>{ cfg.speed = +e.target.value; $('lS').textContent = cfg.speed.toFixed(2); });
+
+$('btnPlay').addEventListener('click', ()=>{
+  playing = !playing;
+  $('btnPlay').textContent = playing ? '暂停' : '播放';
+});
+$('btnReset').addEventListener('click', ()=>{
+  simT = 0; hist.length = 0;
+  particles = []; shock = null; shake = 0; impactMark = 0;
+});
+$('btnSlow').addEventListener('click', ()=>{
+  const slow = cfg.speed > 0.3;
+  cfg.speed = slow ? 0.2 : 1;
+  $('sS').value = cfg.speed; $('lS').textContent = cfg.speed.toFixed(2);
+  $('btnSlow').classList.toggle('on', slow);
+});
+$('btnShot').addEventListener('click', ()=>{ simT += 1/60; });
+
+window.addEventListener('keydown', e=>{
+  if(e.code==='Space'){ e.preventDefault(); $('btnPlay').click(); }
+  else if(e.key==='r'||e.key==='R'){ $('btnReset').click(); }
+  else if(e.key==='ArrowRight'){ simT += 1/60; }
+});
+
+window.addEventListener('resize', ()=>{ resize(); resizeChart(); });
+if(window.ResizeObserver){
+  new ResizeObserver(()=>{ resize(); resizeChart(); }).observe(canvas.parentElement);
+}
+
+/* 启动 */
+resize(); resizeChart();
+requestAnimationFrame(tick);
+
+})();
+</script>
+</body>
+</html>

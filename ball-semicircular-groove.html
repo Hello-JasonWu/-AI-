@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小球从高处落入光滑半圆槽 —— 甲（动量守恒）与 乙（靠墙，动量不守恒）</title>
+<style>
+  :root{
+    --bg:#0b1017; --card:#141d29; --card2:#18232f; --line:#26333f;
+    --txt:#e6edf5; --dim:#8fa3b8;
+    --blue:#4d9de0; --amber:#f5a623; --green:#3ddc97; --red:#ff6b6b; --violet:#a78bfa;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:radial-gradient(1200px 700px at 20% -10%, #16283a 0%, #0b1017 55%, #070b11 100%);
+    color:var(--txt);min-height:100vh;-webkit-font-smoothing:antialiased;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",Roboto,sans-serif;
+  }
+  .wrap{max-width:1460px;margin:0 auto;padding:20px 20px 44px}
+
+  header.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px 16px;margin-bottom:14px}
+  header.top h1{font-size:20px;margin:0;letter-spacing:.5px;font-weight:650}
+  header.top .sub{color:var(--dim);font-size:13px}
+
+  /* ---- 模型切换 ---- */
+  .modes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+  .mode{
+    position:relative;text-align:left;padding:13px 16px;border-radius:14px;cursor:pointer;
+    background:var(--card);border:1px solid var(--line);transition:.18s;font:inherit;color:var(--txt);
+  }
+  .mode:hover{background:#1b2735;border-color:#3a4c5e}
+  .mode .mt{font-size:14.5px;font-weight:650;display:flex;align-items:center;gap:8px;margin-bottom:5px}
+  .mode .md{font-size:12.3px;color:var(--dim);line-height:1.6}
+  .mode .tag{font-size:11px;padding:2px 8px;border-radius:999px;font-weight:600}
+  .mode#mA.on{border-color:var(--green);background:linear-gradient(180deg,rgba(61,220,151,.10),rgba(61,220,151,.02));box-shadow:0 0 0 1px rgba(61,220,151,.25)}
+  .mode#mB.on{border-color:var(--red);background:linear-gradient(180deg,rgba(255,107,107,.10),rgba(255,107,107,.02));box-shadow:0 0 0 1px rgba(255,107,107,.25)}
+  #mA .tag{background:rgba(61,220,151,.15);color:#8bf0c4}
+  #mB .tag{background:rgba(255,107,107,.15);color:#ffb3b3}
+  .mode .dotm{position:absolute;right:14px;top:13px;width:9px;height:9px;border-radius:50%;background:#33414f}
+  .mode.on .dotm{background:currentColor;box-shadow:0 0 12px currentColor}
+  #mA.on .dotm{color:var(--green)} #mB.on .dotm{color:var(--red)}
+
+  .layout{display:grid;grid-template-columns:minmax(0,1fr) 348px;gap:16px;align-items:start}
+  @media (max-width:1080px){ .layout{grid-template-columns:minmax(0,1fr)} }
+
+  .stage{position:relative;background:linear-gradient(180deg,#0e1620 0%,#0a1119 100%);
+    border:1px solid var(--line);border-radius:16px;overflow:hidden;
+    box-shadow:0 18px 50px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.03)}
+  #scene{display:block;width:100%;aspect-ratio:16/9;min-height:300px;touch-action:none}
+  @media (max-width:1080px){ #scene{aspect-ratio:3/2} }
+  @media (max-width:600px){ #scene{aspect-ratio:4/3} }
+
+  .verdict{
+    position:absolute;left:14px;top:12px;right:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+    font-size:12.5px;pointer-events:none;
+  }
+  .chip{padding:6px 12px;border-radius:10px;background:rgba(10,17,25,.75);
+    border:1px solid rgba(120,160,200,.22);backdrop-filter:blur(6px);white-space:nowrap}
+  .chip b{font-weight:650}
+  .chip.ok{border-color:rgba(61,220,151,.5);color:#9df3cd}
+  .chip.bad{border-color:rgba(255,107,107,.5);color:#ffb3b3}
+
+  .chartBox{margin-top:14px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px 6px}
+  .chartBox .hd{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--dim);margin-bottom:6px;flex-wrap:wrap;gap:6px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap}
+  .legend i{display:inline-block;width:16px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+  #chart{display:block;width:100%;height:126px}
+
+  aside{display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 15px}
+  .card h2{margin:0 0 12px;font-size:13px;letter-spacing:1.2px;color:var(--dim);text-transform:uppercase;font-weight:600}
+
+  .readout{display:grid;grid-template-columns:1fr auto;gap:6.5px 10px;font-size:12.8px}
+  .readout .k{color:var(--dim)}
+  .readout .v{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums;font-weight:600}
+  .v.blue{color:var(--blue)} .v.amber{color:var(--amber)} .v.green{color:var(--green)} .v.violet{color:var(--violet)} .v.red{color:var(--red)}
+  .sep{grid-column:1/-1;height:1px;background:var(--line);margin:5px 0}
+
+  .ctrl{margin-bottom:13px}
+  .ctrl:last-child{margin-bottom:2px}
+  .ctrl .row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--dim);margin-bottom:5px}
+  .ctrl .row b{color:var(--txt);font-family:ui-monospace,Menlo,monospace;font-weight:600}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:3px;
+    background:linear-gradient(90deg,var(--blue),#2b6ea8);outline:none;cursor:pointer}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+    background:#eaf3fb;border:3px solid var(--blue);box-shadow:0 2px 8px rgba(0,0,0,.5);cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:#eaf3fb;border:3px solid var(--blue);cursor:pointer}
+
+  .btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  button{font:inherit;font-size:13px;padding:9px 10px;border-radius:10px;cursor:pointer;
+    background:var(--card2);color:var(--txt);border:1px solid var(--line);transition:.15s}
+  button:hover{background:#1f2d3c;border-color:#3a4c5e}
+  button.primary{background:linear-gradient(180deg,#2f7fd0,#1f5f9f);border-color:#3f8fd8}
+  button.primary:hover{background:linear-gradient(180deg,#3a8ee0,#266cae)}
+  button.on{background:linear-gradient(180deg,#2c6b52,#1f5240);border-color:#3ddc97;color:#c9ffe8}
+
+  .checks{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;font-size:12.5px;color:var(--dim)}
+  .checks label{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
+  .checks input{accent-color:var(--blue);width:14px;height:14px;cursor:pointer}
+
+  .note{font-size:12.9px;line-height:1.78;color:#b9c9da}
+  .note b{color:var(--txt)}
+  .note .fml{display:block;margin:8px 0;padding:9px 11px;border-radius:9px;background:#0d141d;
+    border:1px solid var(--line);border-left:3px solid var(--blue);
+    font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.2px;color:#cfe4f7;overflow-x:auto;white-space:nowrap}
+  .note ul{margin:6px 0 0;padding-left:18px} .note li{margin:5px 0}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media (max-width:820px){ .two{grid-template-columns:1fr} }
+  @media (max-width:700px){ .modes{grid-template-columns:1fr} }
+  .two h3{font-size:13.5px;margin:0 0 8px}
+  .kbd{font-family:ui-monospace,Menlo,monospace;background:#0d141d;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:12px}
+  footer{margin-top:16px;color:#54677c;font-size:12px;line-height:1.7}
+  table.cmp{width:100%;border-collapse:collapse;font-size:12.4px;margin-top:6px}
+  table.cmp th,table.cmp td{border:1px solid var(--line);padding:6px 9px;text-align:left}
+  table.cmp th{background:#0d141d;color:var(--dim);font-weight:600}
+  table.cmp td.num{font-family:ui-monospace,Menlo,monospace;color:#cfe4f7}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>小球从高处落入光滑半圆槽</h1>
+    <span class="sub">小球从 A 点上方 h 处由静止落下、相切进入槽口；同一下落高度，两种边界条件 —— 差别只在「槽的左边有没有墙」。</span>
+  </header>
+
+  <div class="modes">
+    <button class="mode on" id="mA">
+      <span class="dotm"></span>
+      <span class="mt">甲 · 槽放在光滑水平面上 <span class="tag">水平动量守恒</span></span>
+      <span class="md">系统水平方向不受外力，p<sub>x</sub> ≡ 0，质心钉死不动。小球沿右壁冲到槽口时速度仍是 √(2gh) 且沿切线竖直，于是<b>飞出槽口、再原样落回</b>，槽在这段时间恰好静止。最终<b>精确回到出发点</b>，严格周期。</span>
+    </button>
+    <button class="mode" id="mB">
+      <span class="dotm"></span>
+      <span class="mt">乙 · 槽左侧紧贴墙壁 <span class="tag">动量不守恒</span></span>
+      <span class="md">小球下滑时把槽往左推，被墙顶住 —— 墙给了系统一个向外的冲量。越过最低点后槽脱离墙壁，此时总动量已经是 <b>m√(2g(R+h)) ≠ 0</b>，质心此后匀速右漂。小球<b>最高只能到 (R+h)·M/(M+m)</b>，比释放高度矮一截；只有 h 超过临界值 Rm/M 时才能从右端飞出。</span>
+    </button>
+  </div>
+
+  <div class="layout">
+    <div>
+      <div class="stage">
+        <canvas id="scene"></canvas>
+        <div class="verdict">
+          <span class="chip" id="chipMode">甲模型</span>
+          <span class="chip" id="chipP">p<sub>x</sub> = 0.000</span>
+          <span class="chip" id="chipCM">质心 x<sub>c</sub> = 0.000</span>
+          <span class="chip" id="chipHome">—</span>
+          <span class="chip" id="chipFly">—</span>
+        </div>
+      </div>
+
+      <div class="chartBox">
+        <div class="hd">
+          <span>时间曲线（小球高度按释放高度 R+h 归一化；质心位置按窗口自适应）</span>
+          <span class="legend">
+            <span><i style="background:#f5a623"></i>小球高度 / (R+h)</span>
+            <span><i style="background:#a78bfa"></i>系统质心 x<sub>c</sub></span>
+          </span>
+        </div>
+        <canvas id="chart"></canvas>
+      </div>
+    </div>
+
+    <aside>
+      <div class="card">
+        <h2>实时数据</h2>
+        <div class="readout">
+          <span class="k">小球状态</span><span class="v" id="rSt">—</span>
+          <span class="k">小球位置角 θ</span><span class="v amber" id="rTh">—</span>
+          <span class="k">小球高度 h</span><span class="v amber" id="rH">—</span>
+          <span class="k">小球对地速率</span><span class="v amber" id="rVb">—</span>
+          <span class="k">球相对槽速率 Rω</span><span class="v amber" id="rW">—</span>
+          <div class="sep"></div>
+          <span class="k">槽的速度 V</span><span class="v blue" id="rV">—</span>
+          <span class="k">槽的位移 X</span><span class="v blue" id="rX">—</span>
+          <div class="sep"></div>
+          <span class="k">系统总动量 p<sub>x</sub></span><span class="v green" id="rP">—</span>
+          <span class="k">质心速度 v<sub>c</sub></span><span class="v violet" id="rVc">—</span>
+          <span class="k">质心位置 x<sub>c</sub></span><span class="v violet" id="rXc">—</span>
+          <div class="sep"></div>
+          <span class="k">入槽后最高点</span><span class="v red" id="rHmax">—</span>
+          <span class="k">理论上限</span><span class="v" id="rHth">—</span>
+          <span class="k">释放高度 R+h</span><span class="v" id="rHrel">—</span>
+          <span class="k">最高点 / 释放高度</span><span class="v" id="rRatio">—</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>参数调节</h2>
+        <div class="ctrl">
+          <div class="row"><span>槽的质量 M</span><b><span id="lM">3.0</span> kg</b></div>
+          <input type="range" id="sM" min="1" max="12" step="0.1" value="3">
+        </div>
+        <div class="ctrl">
+          <div class="row"><span>小球质量 m</span><b><span id="lmm">1.0</span> kg</b></div>
+          <input type="range" id="smm" min="0.2" max="6" step="0.1" value="1">
+        </div>
+        <div class="ctrl">
+          <div class="row"><span>下落高度 h（A 点以上）</span><b><span id="lh">0.20</span> m</b></div>
+          <input type="range" id="sh" min="0.02" max="0.60" step="0.01" value="0.2">
+          <div style="font-size:11px;color:#5e7288;margin-top:5px">乙的临界值 h* = Rm/M = <span id="lhstar">0.267</span> m，超过它小球才飞得出槽口</div>
+        </div>
+        <div class="ctrl">
+          <div class="row"><span>槽半径 R</span><b><span id="lR">0.80</span> m</b></div>
+          <input type="range" id="sR" min="0.45" max="1.05" step="0.01" value="0.8">
+        </div>
+        <div class="ctrl">
+          <div class="row"><span>播放速度</span><b><span id="lS">1.00</span> ×</b></div>
+          <input type="range" id="sS" min="0.05" max="1.5" step="0.05" value="1">
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>播放控制</h2>
+        <div class="btns">
+          <button class="primary" id="btnPlay">暂停</button>
+          <button id="btnReset">重置</button>
+          <button id="btnSlow">慢动作 ×0.25</button>
+          <button id="btnShot">单帧前进</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>显示选项</h2>
+        <div class="checks">
+          <label><input type="checkbox" id="cCM" checked>质心标记</label>
+          <label><input type="checkbox" id="cVec" checked>速度矢量</label>
+          <label><input type="checkbox" id="cTrail" checked>小球轨迹</label>
+          <label><input type="checkbox" id="cRuler" checked>地面标尺</label>
+          <label><input type="checkbox" id="cHmax" checked>高度参考线</label>
+          <label><input type="checkbox" id="cInfo" checked>标注文字</label>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>物理原理</h2>
+    <div class="note" style="margin-bottom:12px">
+      两种模型都从同一起点出发：小球在左端口 <b>A 点正上方 h 处由静止释放</b>，自由下落 h 后到达 A。A 点处圆弧的切线正好是竖直方向，所以小球是<b>相切进入</b>的 —— 不撞、不弹、无能量损失，入槽速度就是
+      <span class="fml">v<sub>A</sub> = √(2gh)，方向沿 A 点切线（竖直向下）</span>
+      取槽底为零势能面，释放高度记作 <b>H = R + h</b>，系统的总机械能就是 mgH。
+    </div>
+    <div class="two">
+      <div class="note">
+        <h3 style="color:#8bf0c4">甲：无墙 —— 水平动量守恒</h3>
+        入槽瞬间小球速度竖直、槽静止，所以 <b>p<sub>x</sub> 仍然恒为 0</b>。由 p<sub>x</sub>≡0 积分出的槽位置
+        <span class="fml">X(θ) = − mR(1 + sinθ) / (M + m)</span>
+        <b>与 h 完全无关</b> —— 下落高度再大，槽的摆幅也只由质量比决定。能量守恒给出小球能回到释放高度，所以它会一路冲上右端顶点，且到达顶点时
+        <ul>
+          <li>θ = +90°，cosθ = 0 ⟹ <b>槽的速度恰好为零</b></li>
+          <li>小球速度 (0, ±√(2gh))，<b>竖直、正好沿切线</b></li>
+        </ul>
+        于是小球干脆<b>飞出槽口</b>：竖直上抛 h 再落回同一槽口。它飞行的这段时间里槽一动不动（无水平受力，V 恒为 0）。落回后原路荡回，从左端再飞出、再落回 —— <b>整体严格周期，小球精确回到出发点，h 多大都一样</b>。
+      </div>
+
+      <div class="note">
+        <h3 style="color:#ffb3b3">乙：左侧靠墙 —— 动量不守恒</h3>
+        小球沿左半边下滑时把槽往左推，被墙顶死，槽被"钉"在原地。这一段小球相当于在固定圆槽里从 A 滑到槽底：
+        <span class="fml">½mv² = mg(R+h) ⟹ v<sub>底</sub> = √(2g(R+h))</span>
+        越过最低点后小球把槽往<b>右</b>推，槽脱离墙壁。此后动量守恒，但守恒的是<b>被墙冲出来的那个动量</b>：
+        <span class="fml">p = m√(2g(R+h)) ≠ 0 ⟹ 质心以 p/(M+m) 匀速右漂，永不回头</span>
+        把能量守恒与动量守恒联立，小球能达到的最高点被死死锁住：
+        <span class="fml">h<sub>max</sub> = H · M/(M+m) = (R+h) · M/(M+m)</span>
+        无论从多高扔下来，乙模型里小球<b>永远只能升到释放高度的 M/(M+m) 倍</b> —— 墙"吃掉"的那部分机械能变成了整个系统质心的平动动能。
+        <ul>
+          <li>若 h<sub>max</sub> &lt; R，即 <b>h &lt; h* = Rm/M</b>：小球到不了右端槽口，被永久关在槽内来回摆，</li>
+          <li>若 <b>h &gt; h*</b>：小球才能从右端飞出去，但飞出的高度也只有 (hM−mR)/(M+m)，仍然回不到原高度。</li>
+          <li>无论哪种情况，<b>槽只会一路向右漂，永远回不到墙边；小球也永远回不到出发点。</b></li>
+        </ul>
+      </div>
+    </div>
+
+    <table class="cmp">
+      <tr><th>对比项</th><th>甲（光滑水平面）</th><th>乙（左侧靠墙）</th></tr>
+      <tr><td>水平动量 p<sub>x</sub></td><td class="num">恒为 0</td><td class="num">被墙冲成 m√(2g(R+h)) 后守恒</td></tr>
+      <tr><td>质心</td><td class="num">钉死不动</td><td class="num">以 m√(2g(R+h))/(M+m) 匀速右漂</td></tr>
+      <tr><td>槽的摆幅</td><td class="num">2mR/(M+m)，<b>与 h 无关</b></td><td class="num">单向漂移，无摆幅</td></tr>
+      <tr><td>小球最高点</td><td class="num">R + h（就是释放高度，比值 1）</td><td class="num">(R+h)·M/(M+m)（比值 M/(M+m)）</td></tr>
+      <tr><td>小球能否飞出槽口</td><td class="num" style="color:#3ddc97">一定能，每次都飞出</td><td class="num">只有 h &gt; h* = Rm/M 才行</td></tr>
+      <tr><td>能否回到出发点</td><td class="num" style="color:#3ddc97">能，严格周期</td><td class="num" style="color:#ff6b6b">不能，槽持续单向漂移</td></tr>
+    </table>
+    <div style="margin-top:10px;color:#8fa3b8;font-size:12.3px;line-height:1.7">
+      注：槽的内表面光滑，小球是<b>滑动</b>而不是滚动，可当质点处理；画面里球心轨迹半径取 R − r<sub>球</sub>，公式里的 R 指球心圆弧半径。竖直方向动量不守恒（重力与地面支持力都是外力），所以只讨论水平方向。小球与槽内壁保持接触期间才有法向力，"飞出槽口"后小球只受重力，槽不再受力，两者水平速度恰好相同，因此小球总是落回原来那个槽口。
+    </div>
+  </div>
+
+  <footer>
+    提示：<span class="kbd">空格</span> 播放/暂停 · <span class="kbd">R</span> 重置 · <span class="kbd">1</span>/<span class="kbd">2</span> 切换甲/乙 · <span class="kbd">→</span> 单帧前进。
+    把<b>下落高度 h</b> 从 0.02 拉到 0.60，可以看到甲模型里小球越飞越高而槽的摆幅纹丝不动（恒为 2mR/(M+m)）；乙模型里 h 一旦越过 h* = Rm/M，小球就突然能冲出槽口了。
+  </footer>
+</div>
+
+<script>
+(function(){
+'use strict';
+
+const g = 9.8;
+const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+/* ============================================================
+   1. 参数与几何
+   ============================================================ */
+const cfg = { M:3, m:1, R:0.80, h:0.20, speed:1 };
+let mode = 'A';                     // 'A' 甲（无墙） | 'B' 乙（左侧靠墙）
+
+const rb      = 0.10;               // 小球半径（只影响画面）
+const wallT   = 0.22;               // 槽壁厚度
+const baseGap = 0.12;               // 弧底距地面
+
+function geo(){
+  const Ri = cfg.R + rb;            // 槽内表面半径
+  return { Ri, cy: baseGap + Ri, half: Ri + wallT };
+}
+
+/* ============================================================
+   2. 运动方程  —— 两套相位：flight（空中）/ groove（贴在槽内壁上）
+      θ 从"竖直向下"量起，向右为正
+      球心： x = X + R sinθ ,  y = cy − R cosθ
+      θ̈ = −sinθ·[ g(M+m)/R + m cosθ θ̇² ] / (M + m sin²θ)
+      Ẍ = mR( sinθ θ̇² − cosθ θ̈ ) / (M+m)
+      靠墙时（乙模型、X 贴墙、θ≤0）：槽被钉死 θ̈ = −(g/R) sinθ
+      空中：球只受重力，槽不受水平力（V 恒定）
+   ============================================================ */
+let PH = 'flight';                  // 'flight' | 'groove'
+// 状态向量 y = [θ, θ̇, 球x, 球y, 球vx, 球vy, X, V]
+function derivs(y){
+  const th=y[0], om=y[1], bvx=y[4], bvy=y[5], X=y[6], V=y[7];
+  if(PH==='flight') return [0,0, bvx, bvy, 0, -g, V, 0];
+
+  const s=Math.sin(th), c=Math.cos(th);
+  const M=cfg.M, m=cfg.m, R=cfg.R;
+  const contact = (mode==='B') && (X<=1e-9) && (th<=0);
+  let thdd, Xdd;
+  if(contact){ thdd = -(g/R)*s; Xdd = 0; }
+  else{
+    thdd = -s*(g*(M+m)/R + m*c*om*om)/(M + m*s*s);
+    Xdd  = m*R*(s*om*om - c*thdd)/(M+m);
+  }
+  return [om, thdd, V+R*c*om, R*s*om, 0, 0, V, Xdd];
+}
+
+/* ============================================================
+   3. 状态与积分
+   ============================================================ */
+let S = null;
+let simT=0, maxH=0, entered=false, passedBottom=false, returned=0, flashReturn=0, prevBvy=0;
+
+function reset(){
+  const G=geo();
+  PH='flight';
+  S = { th:-Math.PI/2, om:0,
+        bx:-cfg.R, by:G.cy+cfg.h, bvx:0, bvy:0,   // 释放点：A 点正上方 h
+        X:0, V:0 };
+  simT=0; maxH=0; entered=false; passedBottom=false; returned=0;
+  flashReturn=0; prevBvy=0;
+  hist.length=0; trail.length=0; camX=null;
+}
+
+function integrate(hh){
+  const y=[S.th,S.om,S.bx,S.by,S.bvx,S.bvy,S.X,S.V];
+  const k1=derivs(y);
+  const k2=derivs(y.map((v,i)=>v+hh/2*k1[i]));
+  const k3=derivs(y.map((v,i)=>v+hh/2*k2[i]));
+  const k4=derivs(y.map((v,i)=>v+hh*k3[i]));
+  const o=y.map((v,i)=>v+hh/6*(k1[i]+2*k2[i]+2*k3[i]+k4[i]));
+  S.th=o[0]; S.om=o[1]; S.bx=o[2]; S.by=o[3]; S.bvx=o[4]; S.bvy=o[5]; S.X=o[6]; S.V=o[7];
+  if(mode==='B' && S.X<0){ S.X=0; if(S.V<0) S.V=0; }
+  if(PH==='groove'){                       // 槽内：位置由 θ 与 X 决定，重新对齐消除漂移
+    const G=geo();
+    S.bx = S.X + cfg.R*Math.sin(S.th);
+    S.by = G.cy - cfg.R*Math.cos(S.th);
+  }
+}
+
+/* 相切进入 A/C 点：此时 cosθ=0，球相对槽只有竖直分速度，θ̇ = ±v/R */
+function enterGroove(){
+  const G=geo();
+  const right = (S.bx - S.X) >= 0;
+  S.th = right ? Math.PI/2 : -Math.PI/2;
+  S.om = (right ? S.bvy : -S.bvy)/cfg.R;
+  S.bx = S.X + cfg.R*Math.sin(S.th);
+  S.by = G.cy;
+  PH='groove';
+}
+/* 到达槽口：速度沿切线（竖直），转为空中抛体 */
+function exitGroove(side){
+  const G=geo();
+  S.th = side>0 ? Math.PI/2 : -Math.PI/2;
+  S.bx = S.X + cfg.R*Math.sin(S.th);
+  S.by = G.cy - cfg.R*Math.cos(S.th);
+  S.bvx = S.V;                                    // cosθ=0
+  S.bvy = cfg.R*Math.sin(S.th)*S.om;
+  PH='flight';
+}
+
+function copyS(){ return {th:S.th,om:S.om,bx:S.bx,by:S.by,bvx:S.bvx,bvy:S.bvy,X:S.X,V:S.V}; }
+function pasteS(o){ S.th=o.th;S.om=o.om;S.bx=o.bx;S.by=o.by;S.bvx=o.bvx;S.bvy=o.bvy;S.X=o.X;S.V=o.V; }
+
+function substep(hh){
+  const G=geo();
+  /* ---- 空中：精确解出落到槽口高度的时刻（抛体是抛物运动，可解析求根） ---- */
+  if(PH==='flight'){
+    if(S.bvy < 0){
+      const dy = S.by - G.cy;
+      if(dy <= 0){ enterGroove(); return; }
+      const v0 = S.bvy;                                  // < 0
+      const tc = (v0 + Math.sqrt(v0*v0 + 2*g*dy))/g;     // by0 + v0 t − ½g t² = cy
+      if(tc < hh){ integrate(Math.max(tc,0)); enterGroove(); return; }
+    }
+    integrate(hh);
+    return;
+  }
+  /* ---- 槽内：若本步会冲出槽口，二分回退到恰好到达槽口的时刻 ---- */
+  const before = copyS();
+  integrate(hh);
+  const outR = (S.th >=  Math.PI/2 && S.om > 0);
+  const outL = (S.th <= -Math.PI/2 && S.om < 0);
+  if(outR || outL){
+    let lo=0, hi=hh;
+    for(let k=0;k<26;k++){
+      const mid=(lo+hi)/2;
+      pasteS(before); integrate(mid);
+      const o = (S.th >=  Math.PI/2 && S.om > 0) || (S.th <= -Math.PI/2 && S.om < 0);
+      if(o) hi=mid; else lo=mid;
+    }
+    pasteS(before); integrate(hi);
+    exitGroove(outR ? +1 : -1);
+  }
+}
+
+/* ---- 导出量 ---- */
+function phys(){
+  const G=geo(), R=cfg.R, M=cfg.M, m=cfg.m;
+  let th,om,bx,by,bvx,bvy;
+  if(PH==='groove'){
+    th=S.th; om=S.om;
+    bx = S.X + R*Math.sin(th);
+    by = G.cy - R*Math.cos(th);
+    bvx = S.V + R*Math.cos(th)*om;
+    bvy = R*Math.sin(th)*om;
+  }else{
+    th=NaN; om=NaN;
+    bx=S.bx; by=S.by; bvx=S.bvx; bvy=S.bvy;
+  }
+  const hgt = by - (G.cy - R);                 // 距弧底高度
+  const px  = m*bvx + M*S.V;                   // 系统水平总动量
+  const xc  = (m*bx + M*S.X)/(M+m);            // 系统质心 x
+  const vcm = px/(M+m);
+  const Ek  = 0.5*M*S.V*S.V + 0.5*m*(bvx*bvx+bvy*bvy);
+  const Ep  = m*g*hgt;
+  const rel = (PH==='groove') ? Math.abs(R*om) : Math.hypot(bvx-S.V, bvy);
+  return { ph:PH, th,om, X:S.X, V:S.V, bx,by,bvx,bvy, hgt, px,xc,vcm,
+           Ek, Ep, E:Ek+Ep, rel, G };
+}
+
+/* ---- 解析预测 ---- */
+function theory(){
+  const M=cfg.M, m=cfg.m, R=cfg.R, h=cfg.h;
+  const H = R + h;                             // 释放高度（以弧底为零势能面）
+  const hStar = R*m/M;                         // 乙的临界下落高度
+  if(mode==='A'){
+    return { H, hmax:H, ratio:1, dX:-2*m*R/(M+m), thMax:Math.PI/2,
+             escapes:true, hStar, vbot:Math.sqrt(2*g*H*M/(M+m)), vA:Math.sqrt(2*g*h) };
+  }
+  const hmax = H*M/(M+m);
+  const escapes = hmax > R;
+  const thMax = escapes ? Math.PI/2 : Math.acos(clamp(1-(H*M)/(R*(M+m)), -1, 1));
+  return { H, hmax, ratio:M/(M+m), dX:Infinity, thMax, escapes, hStar,
+           vbot:Math.sqrt(2*g*H), vA:Math.sqrt(2*g*h), vcm:m*Math.sqrt(2*g*H)/(M+m) };
+}
+
+/* ============================================================
+   4. 画布
+   ============================================================ */
+const canvas=document.getElementById('scene'), ctx=canvas.getContext('2d');
+let W=0,H=0,scale=200,groundY=0,camX=null;
+
+function resize(){
+  const r=canvas.getBoundingClientRect();
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  W=Math.max(300,r.width); H=Math.max(220,r.height);
+  canvas.width=Math.round(W*dpr); canvas.height=Math.round(H*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const worldW=4.40, worldH=2.30;
+  scale=Math.min(W/worldW, H/worldH);
+  groundY=H-Math.max(38,H*0.085);
+  if(camX===null) camX=-0.30;
+}
+const SX = wx => W/2 + (wx - camX)*scale;
+const SY = wy => groundY - wy*scale;
+
+function rr(x,y,w,h,r){
+  r=Math.min(r,Math.abs(w)/2,Math.abs(h)/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y);
+  ctx.closePath();
+}
+function arrow(x1,y1,x2,y2,color,wd){
+  const a=Math.atan2(y2-y1,x2-x1);
+  ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=wd; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  const hl=wd*3.2;
+  ctx.beginPath(); ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-hl*Math.cos(a-0.42), y2-hl*Math.sin(a-0.42));
+  ctx.lineTo(x2-hl*Math.cos(a+0.42), y2-hl*Math.sin(a+0.42));
+  ctx.closePath(); ctx.fill();
+}
+
+/* ---------- 地面 + 绝对米标尺 ---------- */
+function drawGround(){
+  const y=SY(0);
+  const gr=ctx.createLinearGradient(0,y,0,H);
+  gr.addColorStop(0,'#18222e'); gr.addColorStop(1,'#0a0f16');
+  ctx.fillStyle=gr; ctx.fillRect(0,y,W,H-y);
+  ctx.save(); ctx.beginPath(); ctx.rect(0,y,W,H-y); ctx.clip();
+  ctx.strokeStyle='rgba(77,157,224,.18)'; ctx.lineWidth=1;
+  for(let x=-H;x<W+H;x+=13){ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+(H-y),H); ctx.stroke(); }
+  ctx.restore();
+  ctx.strokeStyle='#4d9de0'; ctx.lineWidth=2.2;
+  ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+
+  if(!document.getElementById('cRuler').checked) return;
+  // 绝对刻度：每 1 m 一个带数字的大刻度，每 0.25 m 一个小刻度
+  const x0w = camX - (W/2)/scale, x1w = camX + (W/2)/scale;
+  ctx.save();
+  ctx.font='600 10.5px ui-monospace,Menlo,monospace';
+  ctx.textAlign='center'; ctx.textBaseline='top';
+  for(let k=Math.ceil(x0w*4);k<=Math.floor(x1w*4);k++){
+    const wx=k/4, px=SX(wx), major=(k%4===0);
+    ctx.strokeStyle = major?'rgba(143,163,184,.55)':'rgba(143,163,184,.22)';
+    ctx.lineWidth = major?1.4:1;
+    ctx.beginPath(); ctx.moveTo(px,y); ctx.lineTo(px,y+(major?9:5)); ctx.stroke();
+    if(major && k%8===0){
+      ctx.fillStyle='rgba(143,163,184,.6)';
+      ctx.fillText(wx.toFixed(0)+' m', px, y+12);
+    }
+  }
+  ctx.restore();
+}
+
+/* ---------- 墙（仅乙） ---------- */
+function drawWall(G){
+  const xR = -G.half;                 // 墙面（槽初始左外沿）
+  const xL = xR - 0.42;
+  const yTop = SY(1.86), yBot = SY(0);
+  const xRs=SX(xR), xLs=SX(xL);
+  const gr=ctx.createLinearGradient(xLs,0,xRs,0);
+  gr.addColorStop(0,'#3a2530'); gr.addColorStop(.6,'#6b3b45'); gr.addColorStop(1,'#8a4a55');
+  ctx.fillStyle=gr; ctx.fillRect(xLs,yTop,xRs-xLs,yBot-yTop);
+  ctx.strokeStyle='#c08494'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(xRs,yTop); ctx.lineTo(xRs,yBot); ctx.stroke();
+  // 斜纹
+  ctx.save(); ctx.beginPath(); ctx.rect(xLs,yTop,xRs-xLs,yBot-yTop); ctx.clip();
+  ctx.strokeStyle='rgba(255,190,205,.22)'; ctx.lineWidth=1.6;
+  for(let yy=yBot; yy>yTop-260; yy-=13){
+    ctx.beginPath(); ctx.moveTo(xLs,yy); ctx.lineTo(xRs,yy-26); ctx.stroke();
+  }
+  ctx.restore();
+  if(document.getElementById('cInfo').checked){
+    ctx.save();
+    ctx.fillStyle='#ffc2cf'; ctx.font='700 12.5px -apple-system,"PingFang SC",sans-serif';
+    ctx.textAlign='center';
+    ctx.save(); ctx.translate((xLs+xRs)/2, (yTop+yBot)/2); ctx.rotate(-Math.PI/2);
+    ctx.fillText('墙（槽左侧紧贴）', 0, 4); ctx.restore();
+    ctx.restore();
+  }
+}
+
+/* ---------- 半圆槽 ---------- */
+function groovePath(cxw, G){
+  const x0=SX(cxw-G.half), x1=SX(cxw+G.half);
+  const yTop=SY(G.cy), yBot=SY(0), cxs=SX(cxw), cys=SY(G.cy), rs=G.Ri*scale;
+  ctx.beginPath();
+  ctx.moveTo(x0,yBot);
+  ctx.lineTo(x0,yTop);
+  ctx.lineTo(cxs-rs, yTop);
+  ctx.arc(cxs, cys, rs, Math.PI, 0, true);   // 屏幕坐标下：下半圆 = 槽的内表面
+  ctx.lineTo(x1, yTop);
+  ctx.lineTo(x1, yBot);
+  ctx.closePath();
+}
+function drawGroove(X, G){
+  const cxs=SX(X);
+  // 影子
+  ctx.save(); ctx.globalAlpha=.32; ctx.fillStyle='#000';
+  ctx.beginPath(); ctx.ellipse(cxs, SY(0)+4, G.half*scale*0.95, 7, 0,0,7); ctx.fill(); ctx.restore();
+
+  groovePath(X,G);
+  const gr=ctx.createLinearGradient(0,SY(G.cy),0,SY(0));
+  gr.addColorStop(0,'#8fa8c2'); gr.addColorStop(.35,'#5f7793'); gr.addColorStop(1,'#33455a');
+  ctx.fillStyle=gr; ctx.fill();
+  ctx.strokeStyle='#a9c2da'; ctx.lineWidth=1.6; ctx.stroke();
+
+  // 内表面高亮
+  const cys=SY(G.cy), rs=G.Ri*scale;
+  ctx.beginPath(); ctx.arc(cxs,cys,rs,Math.PI,0,true);
+  ctx.strokeStyle='rgba(220,240,255,.85)'; ctx.lineWidth=3; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cxs,cys,rs-5,Math.PI,0,true);
+  ctx.strokeStyle='rgba(150,200,255,.22)'; ctx.lineWidth=5; ctx.stroke();
+
+  // 表面纹理线
+  ctx.save();
+  groovePath(X,G); ctx.clip();
+  ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.lineWidth=1;
+  for(let yy=SY(0); yy>SY(G.cy)-40; yy-=9){
+    ctx.beginPath(); ctx.moveTo(cxs-G.half*scale, yy); ctx.lineTo(cxs+G.half*scale, yy); ctx.stroke();
+  }
+  ctx.restore();
+
+  // 顶部外沿高光
+  ctx.fillStyle='rgba(255,255,255,.20)';
+  rr(SX(X-G.half)+2, SY(G.cy)+2, 10, 6, 2); ctx.fill();
+  rr(SX(X+G.half)-12, SY(G.cy)+2, 10, 6, 2); ctx.fill();
+}
+
+/* ---------- 小球 ---------- */
+function drawBall(p){
+  const cx=SX(p.bx), cy=SY(p.by), r=rb*scale;
+  ctx.save();
+  ctx.globalAlpha=.30; ctx.fillStyle='#000';
+  ctx.beginPath(); ctx.ellipse(cx, SY(0)+3, r*0.95, 4.5, 0,0,7); ctx.fill();
+  ctx.restore();
+
+  const gr=ctx.createRadialGradient(cx-r*.35,cy-r*.42,r*.12,cx,cy,r);
+  gr.addColorStop(0,'#ffe3a8'); gr.addColorStop(.45,'#f5a623'); gr.addColorStop(1,'#b96f06');
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,7); ctx.fillStyle=gr; ctx.fill();
+  ctx.strokeStyle='#ffd98a'; ctx.lineWidth=1.4; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx-r*.33,cy-r*.36,r*.26,0,7);
+  ctx.fillStyle='rgba(255,255,255,.85)'; ctx.fill();
+}
+
+/* ---------- 轨迹 ---------- */
+const trail=[];
+function pushTrail(p){
+  trail.push({x:p.bx,y:p.by});
+  if(trail.length>320) trail.shift();
+}
+function drawTrail(){
+  if(!document.getElementById('cTrail').checked || trail.length<2) return;
+  ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round';
+  for(let i=1;i<trail.length;i++){
+    const a=i/trail.length;
+    ctx.globalAlpha=a*0.55; ctx.strokeStyle='#f5a623'; ctx.lineWidth=1+a*2.4;
+    ctx.beginPath();
+    ctx.moveTo(SX(trail[i-1].x), SY(trail[i-1].y));
+    ctx.lineTo(SX(trail[i].x),   SY(trail[i].y));
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* ---------- 高度参考线 ---------- */
+function drawHmax(p){
+  if(!document.getElementById('cHmax').checked) return;
+  const G=p.G, th=theory();
+  const yRel = SY(G.cy - cfg.R + th.H);        // 释放高度 R+h
+  const levels = (mode==='A')
+    ? [{ y:yRel, c:'rgba(61,220,151,.8)', t:'释放高度 R+h（甲：能回来）' }]
+    : [{ y:yRel, c:'rgba(245,166,35,.75)', t:'释放高度 R+h' },
+       { y:SY(G.cy - cfg.R + th.hmax), c:'rgba(255,107,107,.8)',
+         t:'乙上限 (R+h)·M/(M+m)' }];
+  ctx.save();
+  ctx.setLineDash([6,5]); ctx.font='600 11.5px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+  for(const L of levels){
+    const xa=Math.max(0, SX(camX-(W/2)/scale)), xb=Math.min(W, SX(camX+(W/2)/scale));
+    ctx.strokeStyle=L.c; ctx.lineWidth=1.3;
+    ctx.beginPath(); ctx.moveTo(xa, L.y); ctx.lineTo(xb, L.y); ctx.stroke();
+    ctx.textAlign='right'; ctx.fillStyle=L.c;
+    ctx.fillText(L.t, W-14, L.y+4);
+  }
+  ctx.restore();
+}
+
+/* ---------- 参考竖线 / 质心 ---------- */
+function drawRefs(p){
+  const G=p.G;
+  // 释放点 A 正上方 h
+  const rx=SX(-cfg.R), ry=SY(G.cy+cfg.h), ay=SY(G.cy);
+  ctx.save();
+  ctx.setLineDash([4,5]); ctx.lineWidth=1.3; ctx.strokeStyle='rgba(245,166,35,.6)';
+  ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(rx, ay); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.arc(rx, ry, 5.5, 0, 7);
+  ctx.fillStyle='rgba(245,166,35,.28)'; ctx.fill();
+  ctx.strokeStyle='rgba(245,166,35,.9)'; ctx.lineWidth=1.4; ctx.stroke();
+  if(document.getElementById('cInfo').checked){
+    ctx.font='600 11px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
+    ctx.fillStyle='rgba(245,190,110,.95)'; ctx.textAlign='left';
+    ctx.fillText('释放点（A 上方 h='+cfg.h.toFixed(2)+' m）', rx+10, ry-6);
+    ctx.fillStyle='rgba(200,215,230,.75)';
+    ctx.fillText('A', rx-16, ay+4);
+  }
+  ctx.restore();
+  // 出发点（槽初始中心 x=0）
+  ctx.save();
+  ctx.strokeStyle='rgba(143,163,184,.45)'; ctx.lineWidth=1.2; ctx.setLineDash([5,6]);
+  ctx.beginPath(); ctx.moveTo(SX(0), SY(0)); ctx.lineTo(SX(0), SY(1.58)); ctx.stroke();
+  ctx.restore();
+  if(document.getElementById('cInfo').checked){
+    ctx.save();
+    ctx.fillStyle='rgba(143,163,184,.8)';
+    ctx.font='600 11.5px -apple-system,"PingFang SC",sans-serif';
+    ctx.textAlign='center'; ctx.fillText('出发点 x=0', SX(0), SY(1.58)-7);
+    ctx.restore();
+  }
+
+  if(!document.getElementById('cCM').checked) return;
+  const yCM = SY(1.34);
+  // 质心当前位置
+  ctx.save();
+  ctx.setLineDash([7,6]); ctx.lineWidth=1.6;
+  ctx.strokeStyle = (mode==='A') ? 'rgba(167,139,250,.85)' : 'rgba(255,107,107,.85)';
+  ctx.beginPath(); ctx.moveTo(SX(p.xc), SY(0)); ctx.lineTo(SX(p.xc), SY(1.86)); ctx.stroke();
+  ctx.restore();
+
+  ctx.beginPath(); ctx.arc(SX(p.xc), yCM, 8, 0, 7);
+  ctx.fillStyle='#a78bfa'; ctx.fill();
+  ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+  ctx.beginPath(); ctx.arc(SX(p.xc), yCM, 14, 0, 7);
+  ctx.strokeStyle='rgba(167,139,250,.4)'; ctx.lineWidth=1.4; ctx.stroke();
+
+  if(document.getElementById('cInfo').checked){
+    ctx.save();
+    ctx.font='600 11.5px -apple-system,"PingFang SC",sans-serif';
+    ctx.textAlign='center';
+    ctx.fillStyle='rgba(190,170,255,.95)';
+    ctx.fillText('系统质心', SX(p.xc), SY(1.86)-8);
+    ctx.restore();
+  }
+}
+
+/* ---------- 速度矢量 ---------- */
+function drawVectors(p){
+  if(!document.getElementById('cVec').checked) return;
+  const KB=0.20, KG=0.30, KC=0.30;
+  // 小球
+  if(Math.hypot(p.bvx,p.bvy)>0.04){
+    const x1=SX(p.bx), y1=SY(p.by);
+    arrow(x1,y1, x1+p.bvx*KB*scale, y1-p.bvy*KB*scale, '#f5a623', 3);
+  }
+  // 槽
+  if(Math.abs(p.V)>0.03){
+    const y=SY(0.22);
+    arrow(SX(p.X), y, SX(p.X+p.V*KG), y, '#4d9de0', 3);
+  }
+  // 质心
+  if(Math.abs(p.vcm)>0.03){
+    const y=SY(1.10);
+    arrow(SX(p.xc), y, SX(p.xc+p.vcm*KC), y, '#a78bfa', 3);
+  }
+}
+
+/* ---------- 回位闪光 ---------- */
+function drawFlash(p){
+  if(flashReturn<=0) return;
+  ctx.save();
+  ctx.globalAlpha=flashReturn;
+  ctx.font='700 15px -apple-system,"PingFang SC",sans-serif';
+  ctx.textAlign='center';
+  ctx.fillStyle='#8bf0c4';
+  ctx.fillText('小球回到出发点 ✓', SX(p.bx), SY(p.by)-30);
+  ctx.restore();
+}
+
+/* ============================================================
+   5. 渲染
+   ============================================================ */
+function render(p){
+  ctx.setTransform(canvas.width/W,0,0,canvas.height/H,0,0);
+  const bg=ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0,'#101a26'); bg.addColorStop(1,'#0a1119');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
+
+  // 相机：甲固定；乙跟一半，让"漂移"看得出来又不会跑飞
+  const target = (mode==='A') ? -0.30 : (-0.30 + 0.72*p.X);   // 乙：镜头跟 72%，槽不会跑出画面
+  camX = (camX===null)? target : lerp(camX, target, 0.08);
+
+  const G=p.G;
+  if(mode==='B') drawWall(G);
+  drawGround();
+  drawRefs(p);
+  drawHmax(p);
+  drawTrail();
+  drawGroove(p.X, G);
+  drawBall(p);
+  drawVectors(p);
+  drawFlash(p);
+
+  if(document.getElementById('cInfo').checked){
+    ctx.save();
+    ctx.font='600 12.5px -apple-system,"PingFang SC",sans-serif';
+    ctx.fillStyle='rgba(150,190,230,.85)'; ctx.textAlign='left';
+    ctx.fillText('光滑水平面（无摩擦）', 14, SY(0)+ (document.getElementById('cRuler').checked?30:20));
+    ctx.restore();
+  }
+}
+
+/* ============================================================
+   6. 曲线
+   ============================================================ */
+const chart=document.getElementById('chart'), cx2=chart.getContext('2d');
+let hist=[], cw=0, ch=0;
+function resizeChart(){
+  const r=chart.getBoundingClientRect();
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  cw=r.width; ch=r.height;
+  chart.width=Math.round(cw*dpr); chart.height=Math.round(ch*dpr);
+  cx2.setTransform(dpr,0,0,dpr,0,0);
+}
+function pushHist(t,h,xc){
+  hist.push({t,h,xc});
+  while(hist.length && hist[0].t < t-11) hist.shift();
+}
+function drawChart(p){
+  cx2.clearRect(0,0,cw,ch);
+  cx2.fillStyle='#0d141d'; cx2.fillRect(0,0,cw,ch);
+  cx2.strokeStyle='rgba(120,160,200,.12)'; cx2.lineWidth=1;
+  for(let i=1;i<4;i++){ const y=ch*i/4; cx2.beginPath(); cx2.moveTo(0,y); cx2.lineTo(cw,y); cx2.stroke(); }
+  if(hist.length<2) return;
+
+  const G=p.G, th=theory();
+  const t0=hist[0].t, t1=hist[hist.length-1].t, span=Math.max(1.5,t1-t0);
+  const PX=t=>(t-t0)/span*cw;
+  const Hrel = cfg.R + cfg.h;
+  const PYh =h=>ch-6-clamp(h/Hrel,0,1.02)*(ch-14);
+
+  // 释放高度基准线
+  cx2.save(); cx2.setLineDash([5,5]); cx2.lineWidth=1;
+  cx2.strokeStyle='rgba(245,166,35,.5)';
+  cx2.beginPath(); cx2.moveTo(0,PYh(Hrel)); cx2.lineTo(cw,PYh(Hrel)); cx2.stroke();
+  if(mode==='B'){
+    cx2.strokeStyle='rgba(255,107,107,.55)';
+    cx2.beginPath(); cx2.moveTo(0,PYh(th.hmax)); cx2.lineTo(cw,PYh(th.hmax)); cx2.stroke();
+  }
+  cx2.restore();
+
+  // 小球高度（面积）
+  cx2.beginPath();
+  hist.forEach((s,i)=>{ const X=PX(s.t),Y=PYh(s.h); i?cx2.lineTo(X,Y):cx2.moveTo(X,Y); });
+  cx2.strokeStyle='#f5a623'; cx2.lineWidth=2; cx2.stroke();
+  cx2.lineTo(PX(hist[hist.length-1].t),ch); cx2.lineTo(PX(hist[0].t),ch); cx2.closePath();
+  cx2.fillStyle='rgba(245,166,35,.12)'; cx2.fill();
+
+  // 质心（窗口自适应）
+  const xs=hist.map(s=>s.xc);
+  let lo=Math.min(...xs), hi=Math.max(...xs);
+  if(hi-lo<1e-6){ const mid=(lo+hi)/2; lo=mid-0.25; hi=mid+0.25; }
+  const pad=(hi-lo)*0.16; lo-=pad; hi+=pad;
+  const PYc=v=>ch-6-(v-lo)/(hi-lo)*(ch-14);
+  cx2.beginPath();
+  hist.forEach((s,i)=>{ const X=PX(s.t),Y=PYc(s.xc); i?cx2.lineTo(X,Y):cx2.moveTo(X,Y); });
+  cx2.strokeStyle='#a78bfa'; cx2.lineWidth=1.9; cx2.stroke();
+
+  const last=hist[hist.length-1];
+  cx2.beginPath(); cx2.arc(PX(last.t),PYh(last.h),3.4,0,7); cx2.fillStyle='#ffd08a'; cx2.fill();
+  cx2.beginPath(); cx2.arc(PX(last.t),PYc(last.xc),3.4,0,7); cx2.fillStyle='#c4b1ff'; cx2.fill();
+}
+
+/* ============================================================
+   7. 主循环
+   ============================================================ */
+let playing=true, lastWall=performance.now()/1000;
+const $=id=>document.getElementById(id);
+const f3=(v,n=3)=>{ const s=v.toFixed(n); return s==='-'+(0).toFixed(n)?(0).toFixed(n):s; };
+
+function tick(){
+  const now=performance.now()/1000;
+  const dt=Math.min(0.05, now-lastWall); lastWall=now;
+
+  if(playing){
+    const simDt=dt*cfg.speed;
+    const N=40, h=simDt/N;
+    for(let i=0;i<N;i++) substep(h);
+    simT+=simDt;
+  }
+  const p=phys();
+
+  // 记录 / 判定
+  if(p.ph==='groove' && p.th>=0) passedBottom=true;
+  if(passedBottom) maxH=Math.max(maxH, p.hgt);
+  // 甲：小球在左端口上方到达最高点（v_y 由正转负）即为"回到出发点"
+  if(mode==='A' && p.ph==='flight' && prevBvy>0 && p.bvy<=0 && p.bx < -cfg.R*0.5){
+    returned++; flashReturn=1; trail.length=0;
+  }
+  prevBvy = (p.ph==='flight') ? p.bvy : 0;
+  flashReturn=Math.max(0, flashReturn-dt*1.1);
+  pushTrail(p);
+  pushHist(now, p.hgt, p.xc);
+
+  render(p);
+  drawChart(p);
+  updateHUD(p);
+  requestAnimationFrame(tick);
+}
+
+function updateHUD(p){
+  const th=theory();
+  const inG = (p.ph==='groove');
+  $('rSt').textContent  = inG? '槽内滑动' : '空中抛体';
+  $('rSt').className    = 'v '+(inG?'amber':'green');
+  $('rTh').textContent  = inG? (p.th*180/Math.PI).toFixed(1)+'°' : '—';
+  $('rH').textContent   = f3(p.hgt)+' m';
+  $('rVb').textContent  = f3(Math.hypot(p.bvx,p.bvy))+' m/s';
+  $('rW').textContent   = f3(p.rel)+' m/s';
+  $('rV').textContent   = f3(p.V)+' m/s';
+  $('rX').textContent   = f3(p.X)+' m';
+  $('rP').textContent   = f3(Math.abs(p.px)<5e-4?0:p.px)+' kg·m/s';
+  $('rVc').textContent  = f3(p.vcm)+' m/s';
+  $('rXc').textContent  = f3(p.xc)+' m';
+  $('rHmax').textContent= f3(maxH)+' m';
+  $('rHth').textContent = (mode==='A'?'R+h = ':'(R+h)·M/(M+m) = ')+f3(th.hmax)+' m';
+  $('rHrel').textContent= f3(th.H)+' m';
+  $('rRatio').textContent = (maxH>1e-6? (maxH/th.H).toFixed(4):'—')
+                          + '   (理论 '+(mode==='A'?'1.0000':th.ratio.toFixed(4))+')';
+
+  $('chipP').textContent  = 'p_x = '+f3(Math.abs(p.px)<5e-4?0:p.px)+' kg·m/s';
+  $('chipP').className    = 'chip '+(mode==='A'?'ok':'bad');
+  $('chipCM').textContent = '质心 x_c = '+f3(p.xc)+' m';
+  $('chipCM').className   = 'chip '+(mode==='A'?'ok':'bad');
+  $('chipMode').textContent = (mode==='A'?'甲模型 · 光滑水平面':'乙模型 · 左侧靠墙');
+  if(mode==='A'){
+    $('chipHome').textContent = '已回到出发点 '+returned+' 次';
+    $('chipHome').className='chip ok';
+  }else{
+    $('chipHome').textContent = '槽已右移 '+f3(p.X)+' m（回不去了）';
+    $('chipHome').className='chip bad';
+  }
+  // 小球能否飞出槽口
+  if(mode==='A'){
+    $('chipFly').textContent = '小球每次都能飞出槽口';
+    $('chipFly').className='chip ok';
+  }else{
+    $('chipFly').textContent = th.escapes
+      ? ('h='+cfg.h.toFixed(2)+' > h*='+th.hStar.toFixed(3)+'：能飞出槽口')
+      : ('h='+cfg.h.toFixed(2)+' < h*='+th.hStar.toFixed(3)+'：被关在槽内');
+    $('chipFly').className='chip '+(th.escapes?'bad':'ok');
+  }
+}
+
+/* ============================================================
+   8. 交互
+   ============================================================ */
+function setMode(m){
+  mode=m;
+  $('mA').classList.toggle('on', m==='A');
+  $('mB').classList.toggle('on', m==='B');
+  reset();
+  lastWall=performance.now()/1000;
+}
+$('mA').addEventListener('click',()=>setMode('A'));
+$('mB').addEventListener('click',()=>setMode('B'));
+
+$('sM').addEventListener('input',e=>{ cfg.M=+e.target.value; $('lM').textContent=cfg.M.toFixed(1); updHStar(); maxH=0; });
+$('smm').addEventListener('input',e=>{ cfg.m=+e.target.value; $('lmm').textContent=cfg.m.toFixed(1); updHStar(); maxH=0; });
+function updHStar(){ $('lhstar').textContent=(cfg.R*cfg.m/cfg.M).toFixed(3); }
+updHStar();
+$('sR').addEventListener('input',e=>{ cfg.R=+e.target.value; $('lR').textContent=cfg.R.toFixed(2); updHStar(); reset(); });
+$('sh').addEventListener('input',e=>{ cfg.h=+e.target.value; $('lh').textContent=cfg.h.toFixed(2); reset(); });
+$('sS').addEventListener('input',e=>{ cfg.speed=+e.target.value; $('lS').textContent=cfg.speed.toFixed(2); });
+
+$('btnPlay').addEventListener('click',()=>{ playing=!playing; $('btnPlay').textContent=playing?'暂停':'播放'; });
+$('btnReset').addEventListener('click',()=>{ reset(); lastWall=performance.now()/1000; });
+$('btnSlow').addEventListener('click',()=>{
+  const slow=cfg.speed>0.4;
+  cfg.speed=slow?0.25:1; $('sS').value=cfg.speed; $('lS').textContent=cfg.speed.toFixed(2);
+  $('btnSlow').classList.toggle('on',slow);
+});
+$('btnShot').addEventListener('click',()=>{ const h=1/60/40; for(let i=0;i<40;i++) substep(h); simT+=1/60; });
+
+window.addEventListener('keydown',e=>{
+  if(e.code==='Space'){ e.preventDefault(); $('btnPlay').click(); }
+  else if(e.key==='r'||e.key==='R'){ $('btnReset').click(); }
+  else if(e.key==='1'){ setMode('A'); }
+  else if(e.key==='2'){ setMode('B'); }
+  else if(e.key==='ArrowRight'){ $('btnShot').click(); }
+});
+window.addEventListener('resize',()=>{ resize(); resizeChart(); });
+if(window.ResizeObserver){ new ResizeObserver(()=>{ resize(); resizeChart(); }).observe(canvas.parentElement); }
+
+/* 启动 */
+resize(); resizeChart();
+reset();                       // S 必须初始化后才能进主循环
+requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

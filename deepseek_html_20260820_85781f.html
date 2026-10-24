@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拉格朗日插值计算器（精确有理数）</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    max-width: 1000px;
+    margin: auto;
+    padding: 20px;
+    line-height: 1.5;
+  }
+  table {
+    border-collapse: collapse;
+    margin: 10px 0;
+  }
+  th, td {
+    border: 1px solid #bbb;
+    padding: 4px 8px;
+    text-align: center;
+  }
+  input[type="text"] {
+    width: 130px;
+    padding: 3px;
+  }
+  button {
+    margin: 4px 2px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+  #output {
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: #f7f7f7;
+    border: 1px solid #ccc;
+    padding: 12px;
+    margin-top: 10px;
+    max-height: 420px;
+    overflow: auto;
+    font-family: 'Courier New', monospace;
+  }
+</style>
+</head>
+<body onload="init()">
+<h1>拉格朗日插值计算器（精确有理数）</h1>
+<p>
+  输入 x 和 y，支持整数、小数、分数（如 <code>1/3</code>）和科学计数法（如 <code>1.5e-2</code>）。
+  所有计算使用 BigInt 有理数精确进行，避免浮点误差。默认已载入你给出的 10 个点。
+</p>
+
+<div>
+  <button onclick="addRow()">＋ 添加点</button>
+  <button onclick="loadExample()">载入示例数据(1-10)</button>
+  <button onclick="clearRows()">清空表格</button>
+</div>
+
+<table id="pointsTable">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>x</th>
+      <th>y = f(x)</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+<button onclick="compute()">计算插值多项式</button>
+
+<div style="margin-top:12px;">
+  <label for="evalX">求值 x = </label>
+  <input type="text" id="evalX" placeholder="例如 5.5 或 1/3">
+  <button onclick="evaluateAt()">精确求值</button>
+</div>
+
+<div id="output"></div>
+
+<script>
+function absBigInt(v) {
+  return v < 0n ? -v : v;
+}
+
+function gcd(a, b) {
+  a = absBigInt(a);
+  b = absBigInt(b);
+  while (b !== 0n) {
+    const t = a % b;
+    a = b;
+    b = t;
+  }
+  return a;
+}
+
+class Rat {
+  constructor(n, d = 1n) {
+    if (d === 0n) throw new Error('分母不能为0');
+    if (d < 0n) {
+      n = -n;
+      d = -d;
+    }
+    const g = gcd(n, d);
+    if (g > 1n) {
+      n /= g;
+      d /= g;
+    }
+    this.n = n;
+    this.d = d;
+  }
+
+  static zero() { return new Rat(0n, 1n); }
+  static one() { return new Rat(1n, 1n); }
+
+  add(o) {
+    return new Rat(this.n * o.d + o.n * this.d, this.d * o.d);
+  }
+
+  sub(o) {
+    return new Rat(this.n * o.d - o.n * this.d, this.d * o.d);
+  }
+
+  mul(o) {
+    return new Rat(this.n * o.n, this.d * o.d);
+  }
+
+  div(o) {
+    if (o.n === 0n) throw new Error('除以零');
+    return new Rat(this.n * o.d, this.d * o.n);
+  }
+
+  neg() {
+    return new Rat(-this.n, this.d);
+  }
+
+  isZero() {
+    return this.n === 0n;
+  }
+}
+
+function parseDecimal(str) {
+  if (str === '') return { n: 0n, d: 1n };
+  if (!str.includes('.')) return { n: BigInt(str), d: 1n };
+  const [intPart, decPart] = str.split('.');
+  const den = 10n ** BigInt(decPart.length);
+  const num = BigInt(intPart || '0') * den + BigInt(decPart || '0');
+  return { n: num, d: den };
+}
+
+function parseRat(str) {
+  str = str.trim().replace(/\s+/g, '');
+  if (!str) throw new Error('空输入');
+
+  let sign = 1n;
+  if (str[0] === '+') str = str.slice(1);
+  else if (str[0] === '-') {
+    sign = -1n;
+    str = str.slice(1);
+  }
+
+  if (str.includes('/')) {
+    const parts = str.split('/');
+    if (parts.length !== 2) throw new Error('无效分数: ' + str);
+    const num = BigInt(parts[0]);
+    const den = BigInt(parts[1]);
+    if (den === 0n) throw new Error('分母不能为0');
+    return new Rat(sign * num, den);
+  }
+
+  if (/[eE]/.test(str)) {
+    const idx = str.search(/[eE]/);
+    const mant = str.slice(0, idx);
+    const exp = BigInt(str.slice(idx + 1));
+    const frac = parseDecimal(mant);
+    if (exp >= 0n) {
+      return new Rat(sign * frac.n * (10n ** exp), frac.d);
+    } else {
+      return new Rat(sign * frac.n, frac.d * (10n ** (-exp)));
+    }
+  }
+
+  const frac = parseDecimal(str);
+  return new Rat(sign * frac.n, frac.d);
+}
+
+function formatRat(r) {
+  if (r.n === 0n) return '0';
+  const sign = r.n < 0n ? '-' : '';
+  const absN = absBigInt(r.n);
+  if (r.d === 1n) return sign + absN.toString();
+  return sign + absN.toString() + '/' + r.d.toString();
+}
+
+function multiplyPoly(poly, linear) {
+  const result = new Array(poly.length + 1).fill(null).map(() => Rat.zero());
+  for (let i = 0; i < poly.length; i++) {
+    const pi = poly[i];
+    if (pi.isZero()) continue;
+    result[i] = result[i].add(pi.mul(linear[0]));
+    result[i + 1] = result[i + 1].add(pi.mul(linear[1]));
+  }
+  return result;
+}
+
+function formatPolynomial(coeffs) {
+  const terms = [];
+  for (let k = coeffs.length - 1; k >= 0; k--) {
+    const c = coeffs[k];
+    if (c.isZero()) continue;
+
+    const sign = c.n < 0n ? '-' : '+';
+    const absC = new Rat(absBigInt(c.n), c.d);
+    const coefStr = formatRat(absC);
+
+    if (k === 0) {
+      terms.push(sign + ' ' + coefStr);
+    } else if (k === 1) {
+      if (coefStr === '1') {
+        terms.push(sign + ' x');
+      } else {
+        terms.push(sign + ' ' + coefStr + ' x');
+      }
+    } else {
+      if (coefStr === '1') {
+        terms.push(sign + ' x^' + k);
+      } else {
+        terms.push(sign + ' ' + coefStr + ' x^' + k);
+      }
+    }
+  }
+
+  if (terms.length === 0) return '0';
+
+  let s = terms.join(' ');
+  if (s.startsWith('+ ')) s = s.slice(2);
+  else if (s.startsWith('- ')) s = '-' + s.slice(2);
+  return s;
+}
+
+function fractionToDecimal(rat, digits = 30) {
+  if (rat.n === 0n) return '0';
+  let n = rat.n;
+  const d = rat.d;
+  const sign = n < 0n ? '-' : '';
+  n = absBigInt(n);
+
+  const intPart = (n / d).toString();
+  let rem = n % d;
+  if (rem === 0n) return sign + intPart;
+
+  const frac = [];
+  for (let i = 0; i < digits && rem !== 0n; i++) {
+    rem *= 10n;
+    frac.push((rem / d).toString());
+    rem %= d;
+  }
+
+  let result = sign + intPart + '.' + frac.join('');
+  if (rem !== 0n) result += '...';
+  return result;
+}
+
+let lastCoeffs = null;
+let lastPolyText = '';
+
+function addRow(x = '', y = '') {
+  const tbody = document.getElementById('tbody');
+  const tr = document.createElement('tr');
+  const idx = tbody.children.length + 1;
+  tr.innerHTML = `<td>${idx}</td>
+    <td><input type="text" value="${x}"></td>
+    <td><input type="text" value="${y}"></td>
+    <td><button onclick="deleteRow(this)">删除</button></td>`;
+  tbody.appendChild(tr);
+}
+
+function deleteRow(btn) {
+  btn.closest('tr').remove();
+  updateRowNumbers();
+}
+
+function updateRowNumbers() {
+  const rows = document.querySelectorAll('#tbody tr');
+  rows.forEach((row, idx) => {
+    row.children[0].textContent = idx + 1;
+  });
+}
+
+function loadExample() {
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  const data = [
+    [1, 73],
+    [2, 88],
+    [3, 79],
+    [4, 90],
+    [5, 66],
+    [6, 98],
+    [7, 82],
+    [8, 63],
+    [9, 77],
+    [10, 86]
+  ];
+  data.forEach(([x, y]) => addRow(x, y));
+}
+
+function clearRows() {
+  document.getElementById('tbody').innerHTML = '';
+  document.getElementById('output').textContent = '';
+  lastCoeffs = null;
+  lastPolyText = '';
+}
+
+function getPoints() {
+  const tbody = document.getElementById('tbody');
+  const rows = tbody.querySelectorAll('tr');
+  const points = [];
+
+  for (const row of rows) {
+    const inputs = row.querySelectorAll('input');
+    if (inputs.length < 2) continue;
+    const xStr = inputs[0].value.trim();
+    const yStr = inputs[1].value.trim();
+    if (xStr === '' || yStr === '') continue;
+
+    points.push({
+      x: parseRat(xStr),
+      y: parseRat(yStr)
+    });
+  }
+
+  return points;
+}
+
+function compute() {
+  const output = document.getElementById('output');
+  try {
+    const points = getPoints();
+    if (points.length < 2) throw new Error('至少需要 2 个点');
+
+    const n = points.length;
+
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        if (points[i].x.sub(points[j].x).isZero()) {
+          throw new Error(`x 值重复：${formatRat(points[i].x)}。拉格朗日插值要求所有 x 互不相同。`);
+        }
+      }
+    }
+
+    const coeffs = new Array(n).fill(null).map(() => Rat.zero());
+
+    for (let i = 0; i < n; i++) {
+      const xi = points[i].x;
+      const yi = points[i].y;
+
+      let base = [Rat.one()];
+      let denom = Rat.one();
+
+      for (let j = 0; j < n; j++) {
+        if (j === i) continue;
+        const xj = points[j].x;
+        const linear = [xj.neg(), Rat.one()]; // 因子 (x - xj)
+        base = multiplyPoly(base, linear);
+        denom = denom.mul(xi.sub(xj));
+      }
+
+      if (denom.isZero()) throw new Error('内部错误：分母为 0');
+      const scale = yi.div(denom);
+      const term = base.map(c => c.mul(scale));
+
+      for (let k = 0; k < term.length; k++) {
+        coeffs[k] = coeffs[k].add(term[k]);
+      }
+    }
+
+    const polyText = formatPolynomial(coeffs);
+    const coeffText = coeffs.map((c, k) => `a${k} = ${formatRat(c)}`).join('\n');
+
+    lastCoeffs = coeffs;
+    lastPolyText = `插值多项式（精确有理数）：\nP(x) = ${polyText}\n\n系数（升幂 a0 + a1*x + ...）：\n${coeffText}`;
+    output.textContent = lastPolyText;
+  } catch (e) {
+    output.textContent = '错误：' + e.message;
+  }
+}
+
+function evaluateAt() {
+  const output = document.getElementById('output');
+  if (!lastCoeffs) {
+    output.textContent = '请先点击“计算插值多项式”。';
+    return;
+  }
+
+  try {
+    const xr = parseRat(document.getElementById('evalX').value);
+    let result = Rat.zero();
+    let xp = Rat.one();
+
+    for (let k = 0; k < lastCoeffs.length; k++) {
+      result = result.add(lastCoeffs[k].mul(xp));
+      xp = xp.mul(xr);
+    }
+
+    output.textContent = lastPolyText + `\n\nP(${formatRat(xr)}) = ${formatRat(result)}\n≈ ${fractionToDecimal(result, 30)}`;
+  } catch (e) {
+    output.textContent = lastPolyText + '\n\n求值错误：' + e.message;
+  }
+}
+
+function init() {
+  loadExample();
+  compute();
+}
+</script>
+</body>
+</html>

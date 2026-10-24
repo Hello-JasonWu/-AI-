@@ -1,0 +1,1582 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>西瓜上的蚂蚁 · 手绘纸纹动画</title>
+<style>
+  html,body{margin:0;padding:0;background:#e9e5da;height:100%;overflow:hidden;
+    font-family:"PingFang SC","Hiragino Sans GB",sans-serif;}
+  #wrap{width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;}
+  canvas{max-width:100vw;max-height:100vh;box-shadow:0 6px 40px rgba(60,50,30,.28);background:#faf7ee;}
+  #info{position:fixed;left:12px;bottom:10px;font-size:12px;color:#7a7364;letter-spacing:.5px;
+    opacity:.75;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="out" width="1280" height="720"></canvas></div>
+<div id="info">西瓜上的蚂蚁 · 手绘纸纹 / 程序化生成</div>
+<script>
+(function(){
+"use strict";
+
+/* ===== 00-core.js ===== */
+/* ============================================================
+   00-core : 确定性随机 / 噪声 / 数学 / 颜色
+   一切随机都由种子驱动，保证逐帧渲染完全可复现（离线导出必需）
+   ============================================================ */
+const TAU = Math.PI * 2;
+const DEBUG_STRIPES = false;
+
+/* 可复现伪随机数（mulberry32） */
+function makeRng(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+/* 全局随机源：每帧开始用同一个种子重置，保证可复现 */
+let RND = makeRng(20240601);
+function seedFrame(seed) { RND = makeRng(seed); }
+const rnd = () => RND();
+const rr = (a, b) => a + (b - a) * RND();
+const ri = (a, b) => Math.floor(rr(a, b + 1));
+const pick = (arr) => arr[Math.floor(RND() * arr.length) % arr.length];
+
+/* ---------- 数学 ---------- */
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+const inv = (a, b, v) => (b === a ? 0 : (v - a) / (b - a));
+const smoothstep = (t) => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+const smoother = (t) => { t = clamp(t, 0, 1); return t * t * t * (t * (t * 6 - 15) + 10); };
+const easeInOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+const easeIn = (t) => t * t * t;
+/* 区间归一化 + 缓动 */
+function seg(t, a, b, fn) { return (fn || easeInOut)(clamp(inv(a, b, t), 0, 1)); }
+const dist = (x1, y1, x2, y2) => Math.hypot(x2 - x1, y2 - y1);
+function mix(a, b, t) { return a + (b - a) * t; }
+
+/* ---------- 值噪声（可复现、带动画的第 3 维） ---------- */
+const NOISE_SIZE = 256;
+const NOISE_MASK = 255;
+const PERM = new Uint8Array(NOISE_SIZE * 2);
+{
+  const r = makeRng(1337);
+  const p = new Uint8Array(NOISE_SIZE);
+  for (let i = 0; i < NOISE_SIZE; i++) p[i] = i;
+  for (let i = NOISE_SIZE - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); const t = p[i]; p[i] = p[j]; p[j] = t; }
+  for (let i = 0; i < NOISE_SIZE * 2; i++) PERM[i] = p[i & NOISE_MASK];
+}
+function hash3(x, y, z) {
+  return PERM[(PERM[(PERM[x & NOISE_MASK] + (y & NOISE_MASK)) & NOISE_MASK] + (z & NOISE_MASK)) & NOISE_MASK] / 255;
+}
+/* 三线性插值的值噪声，返回 0..1 */
+function noise3(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const xf = x - xi, yf = y - yi, zf = z - zi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf), w = zf * zf * (3 - 2 * zf);
+  const c000 = hash3(xi, yi, zi), c100 = hash3(xi + 1, yi, zi);
+  const c010 = hash3(xi, yi + 1, zi), c110 = hash3(xi + 1, yi + 1, zi);
+  const c001 = hash3(xi, yi, zi + 1), c101 = hash3(xi + 1, yi, zi + 1);
+  const c011 = hash3(xi, yi + 1, zi + 1), c111 = hash3(xi + 1, yi + 1, zi + 1);
+  const x00 = lerp(c000, c100, u), x10 = lerp(c010, c110, u);
+  const x01 = lerp(c001, c101, u), x11 = lerp(c011, c111, u);
+  return lerp(lerp(x00, x10, v), lerp(x01, x11, v), w);
+}
+/* 分形噪声 */
+function fbm(x, y, z, oct = 4, gain = 0.5, lac = 2.0) {
+  let s = 0, amp = 0.5, f = 1, norm = 0;
+  for (let i = 0; i < oct; i++) { s += amp * noise3(x * f, y * f, z * f); norm += amp; amp *= gain; f *= lac; }
+  return s / norm;
+}
+/* 有向拉伸噪声：纸张纤维 */
+function fiber(x, y, z) { return noise3(x * 0.02 + y * 0.9, y * 3.2, z); }
+
+/* ---------- 颜色 ---------- */
+function rgba(r, g, b, a = 1) { return `rgba(${r | 0},${g | 0},${b | 0},${a})`; }
+function hexA(hex, a) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+/* 简单的十六进制混色 */
+function mixHex(h1, h2, t) {
+  const a = parseInt(h1.slice(1), 16), b = parseInt(h2.slice(1), 16);
+  const r = Math.round(lerp((a >> 16) & 255, (b >> 16) & 255, t));
+  const g = Math.round(lerp((a >> 8) & 255, (b >> 8) & 255, t));
+  const bl = Math.round(lerp(a & 255, b & 255, t));
+  return `rgb(${r},${g},${bl})`;
+}
+
+
+/* ===== 10-paper.js ===== */
+/* ============================================================
+   10-paper : 纸张底纹 + 手绘笔触引擎
+   目标：让所有图形都像"铅笔 / 炭笔 / 淡水彩"画在有颗粒的纸上
+   ============================================================ */
+
+/* ---------- 纸张底纹：烘焙一次，全片复用 ---------- */
+function bakePaper(W, H) {
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  const d = img.data;
+  const rp = makeRng(90210);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      // 大块色斑：纸浆不均匀
+      const mottle = fbm(x * 0.0055, y * 0.0055, 0.5, 4);
+      // 纸张纤维：沿一个方向拉长
+      const fib = fiber(x, y, 3.7);
+      // 细颗粒：纸的"牙口"
+      const grain = noise3(x * 0.85, y * 0.85, 11.2);
+      const fine = noise3(x * 2.3, y * 2.3, 5.5);
+      let v = 0.938
+        + (mottle - 0.5) * 0.080
+        + (fib - 0.5) * 0.045
+        + (grain - 0.5) * 0.105
+        + (fine - 0.5) * 0.042;
+      // 极少量深色纸屑
+      if (rp() < 0.0006) v -= 0.18;
+      v = clamp(v, 0.72, 1.02);
+      // 暖白纸基 + 轻微偏黄
+      d[i] = clamp(250 * v + 3, 0, 255);
+      d[i + 1] = clamp(247 * v + 1, 0, 255);
+      d[i + 2] = clamp(236 * v - 2, 0, 255);
+      d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return cv;
+}
+
+/* ---------- 纸的"牙口"遮罩：用来吃掉笔触，形成干笔飞白 ---------- */
+function bakeTooth(W, H) {
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  const d = img.data;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const g = noise3(x * 0.45, y * 0.45, 77.1);
+      const g2 = noise3(x * 1.15, y * 1.15, 21.3);
+      const g3 = noise3(x * 0.14, y * 0.14, 5.0);
+      // 大部分为 255（保留笔触），低频噪声形成成片飞白，高频制造颗粒
+      let a = 255 * (0.80 + 0.26 * g + 0.10 * g2 + 0.10 * g3);
+      a = clamp((a - 70) / 0.80, 0, 255);
+      d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = a;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return cv;
+}
+
+/* ---------- 笔触引擎 ---------- */
+/*
+  hx.poly(pts, opts)
+    pts     : [[x,y],...] 折线（会自动圆滑）
+    opts.ink: 颜色（hex 或 rgb 字符串）
+    opts.w  : 线宽
+    opts.a  : 透明度
+    opts.passes  : 复描次数（手绘的关键：同一根线画 2~3 遍，每遍略偏）
+    opts.jitter  : 每次复描的抖动幅度
+    opts.wobble  : 路径本身的抖动幅度
+    opts.taper   : 两端收笔（0~1）
+    opts.hatch   : 附加排线密度（0 = 无）
+*/
+const hx = {
+  ctx: null,
+  scale: 1,
+  _pts: null,
+  setCtx(c, s) { this.ctx = c; this.scale = s; },
+
+  /* 以种子抖动整条折线，并做 Catmull-Rom 圆滑 */
+  jitterPoly(pts, jitter, wobble, seed) {
+    const R = makeRng(seed);
+    const j = jitter / this.scale;
+    const w = wobble / this.scale;
+    const out = [];
+    for (let i = 0; i < pts.length; i++) {
+      out.push([pts[i][0] + (R() - 0.5) * j, pts[i][1] + (R() - 0.5) * j]);
+    }
+    if (w > 0 && out.length > 2) {
+      for (let i = 1; i < out.length - 1; i++) {
+        out[i][0] += (R() - 0.5) * w;
+        out[i][1] += (R() - 0.5) * w;
+      }
+    }
+    return out;
+  },
+
+  /* 把折线转成平滑曲线路径 */
+  path(p) {
+    const c = this.ctx;
+    c.beginPath();
+    if (p.length < 2) return;
+    c.moveTo(p[0][0], p[0][1]);
+    if (p.length === 2) { c.lineTo(p[1][0], p[1][1]); return; }
+    for (let i = 0; i < p.length - 1; i++) {
+      const p0 = p[i - 1] || p[i], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] || p2;
+      const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+      const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+      c.bezierCurveTo(c1x, c1y, c2x, c2y, p2[0], p2[1]);
+    }
+  },
+
+  poly(pts, o = {}) {
+    const c = this.ctx;
+    const ink = o.ink || '#2b2723';
+    const passes = o.passes == null ? 2 : o.passes;
+    const w = (o.w || 2) / this.scale;
+    const a = o.a == null ? 1 : o.a;
+    const seed = o.seed == null ? (rnd() * 1e9) | 0 : o.seed;
+    c.save();
+    c.globalAlpha = a;
+    c.strokeStyle = ink;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    for (let k = 0; k < passes; k++) {
+      const jit = (o.jitter == null ? w * 0.85 : o.jitter / this.scale);
+      const wob = (o.wobble == null ? w * 1.5 : o.wobble / this.scale);
+      let q = this.jitterPoly(pts, jit, wob, seed + k * 7919);
+      if (o.taper) q = this._taper(q, o.taper);
+      this.path(q);
+      c.globalAlpha = a * (k === 0 ? 1 : 0.62);
+      c.lineWidth = w * (k === 0 ? 1 : rr(0.75, 0.95));
+      c.stroke();
+    }
+    c.restore();
+  },
+
+  /* 两端收笔：把端点向内缩，模拟提笔 */
+  _taper(p, amt) {
+    if (p.length < 3) return p;
+    const k = clamp(0.08 + amt * 0.22, 0.05, 0.4);
+    const n = p.length;
+    const out = p.map((q) => [q[0], q[1]]);
+    const a0 = Math.floor(n * k), a1 = Math.ceil(n * (1 - k));
+    return out.slice(Math.max(0, a0), Math.max(1, a1));
+  },
+
+  /* 手绘感的"圆"（椭圆），带起笔收笔 */
+  ellipse(cx, cy, rx, ry, o = {}) {
+    const steps = o.steps || 46;
+    const start = o.start == null ? rr(0, TAU) : o.start;
+    const sweep = o.sweep == null ? TAU * 0.995 : o.sweep;
+    const pts = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const a = start + sweep * t + Math.sin(t * Math.PI * 2) * 0.012;
+      // 半径本身带一点起伏，避免完美圆
+      const wob = 1 + Math.sin(a * 3 + start) * 0.012 + Math.cos(a * 5.3) * 0.008;
+      pts.push([cx + Math.cos(a) * rx * wob, cy + Math.sin(a) * ry * wob]);
+    }
+    this.poly(pts, o);
+  },
+
+  /* 排线（交叉线）填充 —— 手绘阴影的主力 */
+  hatch(pts, o = {}) {
+    const c = this.ctx;
+    const seed = o.seed == null ? (rnd() * 1e9) | 0 : o.seed;
+    const R = makeRng(seed);
+    const n = o.n || 12;
+    const ang = o.angle || 0.6;
+    const span = o.span || 1;
+    const ink = o.ink || '#3a3630';
+    const a = (o.a == null ? 0.30 : o.a) / Math.max(1, o.layers || 1);
+    // 取折线包围盒
+    let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+    for (const p of pts) { minx = Math.min(minx, p[0]); miny = Math.min(miny, p[1]); maxx = Math.max(maxx, p[0]); maxy = Math.max(maxy, p[1]); }
+    const cx = (minx + maxx) / 2, cy = (miny + maxy) / 2;
+    const rad = Math.hypot(maxx - minx, maxy - miny) / 2 * span;
+    c.save();
+    this.path(pts); c.clip();  // 限制在形状内部
+    const dirs = [ang, ang + (o.cross === false ? 0 : 1.05)];
+    for (const ang2 of dirs) {
+      const layerN = o.cross === false ? n : Math.round(n * 0.62);
+      for (let i = 0; i < layerN; i++) {
+        const off = (i / layerN - 0.5) * 2 * rad + (R() - 0.5) * rad * 0.06;
+        const dx = Math.cos(ang2), dy = Math.sin(ang2);
+        const px = -dy, py = dx;
+        const len = rad * (0.85 + R() * 0.4);
+        const x1 = cx + px * off - dx * len, y1 = cy + py * off - dy * len;
+        const x2 = cx + px * off + dx * len, y2 = cy + py * off + dy * len;
+        const q = this.jitterPoly([[x1, y1], [x2, y2]], 2 / this.scale, 0, (R() * 1e9) | 0);
+        this.path(q);
+        c.globalAlpha = a * (0.45 + R() * 0.75);
+        c.strokeStyle = ink;
+        c.lineWidth = (o.w || 1.4) / this.scale * (0.7 + R() * 0.6);
+        c.stroke();
+      }
+    }
+    c.restore();
+  },
+
+  /* 打点（砂点）—— 表现粗糙表面 */
+  stipple(pts, o = {}) {
+    const c = this.ctx;
+    const R = makeRng(o.seed == null ? (rnd() * 1e9) | 0 : o.seed);
+    const n = o.n || 200;
+    let minx = 1e9, miny = 1e9, maxx = -1e9, maxy = -1e9;
+    for (const p of pts) { minx = Math.min(minx, p[0]); miny = Math.min(miny, p[1]); maxx = Math.max(maxx, p[0]); maxy = Math.max(maxy, p[1]); }
+    c.save();
+    this.path(pts); c.clip();
+    c.fillStyle = o.ink || '#2f2b26';
+    for (let i = 0; i < n; i++) {
+      const x = minx + R() * (maxx - minx), y = miny + R() * (maxy - miny);
+      const s = (o.size || 1.6) / this.scale * (0.4 + R() * 1.2);
+      c.globalAlpha = (o.a == null ? 0.5 : o.a) * (0.3 + R() * 0.7);
+      c.beginPath();
+      c.arc(x, y, s, 0, TAU);
+      c.fill();
+    }
+    c.restore();
+  },
+
+  /* 淡水彩：多层、低透明度、略微溢出的色块 */
+  wash(pts, o = {}) {
+    const c = this.ctx;
+    const R = makeRng(o.seed == null ? (rnd() * 1e9) | 0 : o.seed);
+    const col = o.color || '#5aa64b';
+    const layers = o.layers || 5;
+    c.save();
+    c.globalCompositeOperation = o.blend || 'multiply';
+    for (let k = 0; k < layers; k++) {
+      const q = this.jitterPoly(pts, (o.jitter == null ? 6 : o.jitter) / this.scale, (o.wobble == null ? 4 : o.wobble) / this.scale, (R() * 1e9) | 0);
+      this.path(q);
+      c.globalAlpha = (o.a == null ? 0.09 : o.a) * (0.7 + R() * 0.6);
+      c.fillStyle = col;
+      c.fill();
+    }
+    c.restore();
+  },
+};
+
+/* 由中心+半径生成椭圆采样点（供 wash / hatch 用，坐标空间为设计坐标） */
+function ellipsePts(cx, cy, rx, ry, steps = 40, rot = 0, squash = 1) {
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const a = (i / steps) * TAU;
+    let x = Math.cos(a) * rx, y = Math.sin(a) * ry * squash;
+    const xr = x * Math.cos(rot) - y * Math.sin(rot);
+    const yr = x * Math.sin(rot) + y * Math.cos(rot);
+    pts.push([cx + xr, cy + yr]);
+  }
+  return pts;
+}
+
+/* 圆弧采样点 */
+function arcPts(cx, cy, r, a0, a1, steps = 24) {
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const a = lerp(a0, a1, i / steps);
+    pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+  }
+  return pts;
+}
+
+
+/* ===== 20-ant.js ===== */
+/* ============================================================
+   20-ant : 手绘蚂蚁
+   局部坐标系：头朝 +X，身体绕原点，size = 体长
+   ============================================================ */
+
+// 六足：[挂点x, 挂点y, 朝向, 步态组, 伸展, 前倾]
+const ANT_LEGS = [
+  { p: [0.072, 0.050], dir: -1, grp: 0, reach: 0.105, fwd: 0.080 },
+  { p: [0.020, 0.048], dir: -1, grp: 1, reach: 0.110, fwd: 0.010 },
+  { p: [-0.055, 0.044], dir: -1, grp: 0, reach: 0.135, fwd: -0.060 },
+  { p: [0.072, -0.050], dir: 1, grp: 1, reach: 0.105, fwd: 0.080 },
+  { p: [0.020, -0.048], dir: 1, grp: 0, reach: 0.110, fwd: 0.010 },
+  { p: [-0.055, -0.044], dir: 1, grp: 1, reach: 0.135, fwd: -0.060 },
+];
+
+/* 画一条腿：从胸侧"弯膝"向外下方落地 */
+function antLeg(ctx, S, leg, jx, jy, phase, ink, alpha, seed) {
+  const dir = leg.dir > 0 ? 1 : -1;
+  const [px, py] = leg.p;
+  // 三角步态：同组腿同相
+  const sw = Math.sin(phase + leg.grp * Math.PI);
+  const lift = Math.max(0, sw);
+
+  const hipX = (px + jx) * S;
+  const hipY = (py + jy * dir) * S;
+  // 落地目标
+  const footX = (px + leg.fwd + sw * 0.075) * S;
+  const footY = (py + dir * (leg.reach + 0.045)) * S - lift * S * 0.020;
+  // 膝：向外上方顶出去
+  const midX = (hipX + footX) * 0.5, midY = (hipY + footY) * 0.5;
+  const kneeX = midX + dir * S * 0.034;
+  const kneeY = midY - S * 0.050;
+
+  const w = S * 0.019;
+  hx.poly([[hipX, hipY], [kneeX, kneeY], [footX, footY]], {
+    ink, w, a: alpha * 0.95, passes: 2, jitter: S * 0.005, wobble: S * 0.003,
+    seed: seed + Math.round(Math.abs(px) * 1000) + dir * 17,
+  });
+  // 足尖
+  const fa = Math.atan2(footY - kneeY, footX - kneeX) + dir * 0.6;
+  hx.poly([[footX, footY], [footX + Math.cos(fa) * S * 0.030, footY + Math.sin(fa) * S * 0.030]], {
+    ink, w: w * 0.72, a: alpha * 0.9, passes: 1, seed: seed + 991,
+  });
+}
+
+/* 主绘制：ctx 已按相机变换过，这里直接在设计坐标里画
+   BODY = 身体相对体长的比例（六足在身体之外展开，因此 < 1） */
+const ANT_BODY = 0.66;
+function bs(pts, S) { return pts.map((p) => [p[0] * S * ANT_BODY, p[1] * S * ANT_BODY]); }
+
+function drawAnt(x, y, ang, size, opts = {}) {
+  const seed = opts.seed == null ? (rnd() * 1e9) | 0 : opts.seed;
+  const t = opts.t || 0;
+  const speed = opts.speed == null ? 1 : opts.speed;
+  const ink = opts.ink || '#2b241c';
+  const alpha = opts.alpha == null ? 1 : opts.alpha;
+  const detail = opts.detail == null ? 1 : opts.detail; // 0=剪影, 1=全细节
+  const S = size;
+
+  const ctx = hx.ctx;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+
+  // ---- 身体起伏（走路时上下颠） ----
+  const bob = Math.sin(t * Math.PI * 2 * speed + seed * 0.001) * S * 0.012;
+  const phase = t * TAU * speed + seed * 0.0013;
+
+  const legAlpha = detail > 0.4 ? alpha : alpha * 0.85;
+  const jx = Math.sin(phase) * 0.008, jy = Math.cos(phase * 0.5) * 0.004;
+
+  // ---- 六足（先画远端三条，再画身体，再画近端三条，形成前后遮挡） ----
+  const far = ANT_LEGS.filter((l) => l.dir < 0);
+  const near = ANT_LEGS.filter((l) => l.dir > 0);
+  for (const l of far) antLeg(ctx, S, l, jx, jy, phase, ink, legAlpha * 0.75, seed + 5);
+
+  ctx.save();
+  ctx.translate(0, bob);
+
+  // ---- 腹部（后段大椭圆，带分节） ----
+  const abdW = S * 0.315, abdH = S * 0.200;
+  const abdPts = bs(ellipsePts(-0.30, 0, 0.315, 0.200, 34, 0, 1), S);
+  if (opts.fill !== false) {
+    hx.wash(abdPts, { color: '#6b5b48', a: 0.22, layers: 3, jitter: S * 0.016, blend: 'multiply', seed: seed + 1 });
+  }
+  hx.poly(abdPts, { ink, w: S * 0.022, a: alpha, passes: 2, jitter: S * 0.006, wobble: S * 0.004, seed: seed + 2 });
+  if (detail > 0.55) {
+    // 腹节横纹
+    for (let i = 0; i < 3; i++) {
+      const q = -0.44 + i * 0.085;
+      const seg = [];
+      for (let k = 0; k <= 12; k++) {
+        const aa = -1.1 + (k / 12) * 2.2;
+        seg.push([(-q) * 0.86 + Math.cos(aa) * 0.055, Math.sin(aa) * 0.185]);
+      }
+      hx.poly(bs(seg, S), { ink, w: S * 0.011, a: alpha * 0.75, passes: 1, seed: seed + 30 + i * 13 });
+    }
+    // 腹部高光（侧光）
+    hx.poly(bs(arcPts(-0.30, 0, 0.228, -2.35, -1.25, 10), S), {
+      ink: '#fdfaf3', w: S * 0.022, a: alpha * 0.55, passes: 1, seed: seed + 44,
+    });
+  }
+
+  // ---- 腰节（细） ----
+  hx.poly(bs([[-0.085, -0.045], [-0.045, -0.03], [-0.04, 0.03], [-0.085, 0.045]], S), {
+    ink, w: S * 0.016, a: alpha, passes: 2, jitter: S * 0.004, seed: seed + 3,
+  });
+
+  // ---- 胸部（中段） ----
+  const thoraxPts = bs([
+    [-0.055, -0.072], [0.06, -0.090], [0.155, -0.066],
+    [0.185, 0], [0.155, 0.066], [0.06, 0.090], [-0.055, 0.072],
+  ], S);
+  if (opts.fill !== false) {
+    hx.wash(thoraxPts, { color: '#6b5b48', a: 0.22, layers: 3, jitter: S * 0.012, blend: 'multiply', seed: seed + 6 });
+  }
+  hx.poly(thoraxPts, { ink, w: S * 0.020, a: alpha, passes: 2, jitter: S * 0.005, wobble: S * 0.003, seed: seed + 7 });
+
+  // ---- 头部 ----
+  const headPts = bs([
+    [0.185, -0.070], [0.29, -0.086], [0.365, -0.052],
+    [0.385, 0], [0.365, 0.052], [0.29, 0.086], [0.185, 0.070],
+  ], S);
+  if (opts.fill !== false) {
+    hx.wash(headPts, { color: '#5c4e3e', a: 0.22, layers: 3, jitter: S * 0.012, blend: 'multiply', seed: seed + 8 });
+  }
+  hx.poly(headPts, { ink, w: S * 0.020, a: alpha, passes: 2, jitter: S * 0.005, wobble: S * 0.003, seed: seed + 9 });
+
+  if (detail > 0.5) {
+    // 复眼
+    const eyeY = 0.052 * S * ANT_BODY;
+    ctx.save(); ctx.globalAlpha = alpha * 0.9; ctx.fillStyle = '#17150f';
+    ctx.beginPath(); ctx.ellipse(0.285 * S * ANT_BODY, -eyeY, S * 0.026, S * 0.021, -0.25, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0.285 * S * ANT_BODY, eyeY, S * 0.026, S * 0.021, 0.25, 0, TAU); ctx.fill();
+    ctx.restore();
+    // 大颚
+    for (const sgn of [-1, 1]) {
+      hx.poly(bs([
+        [0.38, sgn * 0.038], [0.475, sgn * 0.020], [0.50, sgn * 0.060], [0.40, sgn * 0.064],
+      ], S), { ink, w: S * 0.015, a: alpha, passes: 2, jitter: S * 0.003, seed: seed + 11 + sgn });
+    }
+    // 触角（摆动）
+    const ant0 = -0.55 + Math.sin(phase * 0.7) * 0.12;
+    const ant1 = 0.55 - Math.sin(phase * 0.7 + 1) * 0.12;
+    [[ant0, -1], [ant1, 1]].forEach(([base, sgn], i) => {
+      const B = S * ANT_BODY;
+      const p0 = [0.355 * B, sgn * 0.055 * B];
+      const p1 = [p0[0] + B * 0.17, p0[1] + sgn * B * (0.16 + base * -0.20)];
+      const p2 = [p1[0] + B * 0.175, p1[1] + sgn * B * 0.10];
+      const p3 = [p2[0] + B * 0.115, p2[1] + sgn * B * (0.025 + Math.sin(phase * 1.3 + i) * 0.06)];
+      hx.poly([p0, p1, p2, p3], { ink, w: S * 0.014, a: alpha, passes: 2, jitter: S * 0.005, wobble: S * 0.005, seed: seed + 20 + i });
+    });
+  }
+
+  // ---- 近侧三条腿 ----
+  for (const l of near) antLeg(ctx, S, l, jx, jy, phase, ink, legAlpha, seed + 15);
+
+  ctx.restore();
+  ctx.restore();
+}
+
+/* 简化版：远景里的一小队蚂蚁，只是几个墨点 + 腿 */
+function drawAntTiny(x, y, ang, size, opts = {}) {
+  const ctx = hx.ctx;
+  const seed = opts.seed == null ? (rnd() * 1e9) | 0 : opts.seed;
+  const a = opts.alpha == null ? 1 : opts.alpha;
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(ang);
+  ctx.globalAlpha = a;
+  ctx.fillStyle = opts.ink || '#221f1c';
+  [-0.32, -0.02, 0.28].forEach((q, i) => {
+    ctx.beginPath();
+    ctx.ellipse(q * size, 0, size * (i === 0 ? 0.26 : i === 1 ? 0.16 : 0.17), size * (i === 0 ? 0.17 : 0.13), 0, 0, TAU);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+/* 蚂蚁投在瓜皮上的软影 */
+function drawAntShadow(x, y, ang, size, opts = {}) {
+  if (!fillOn) return;            // 阴影属于水彩层，只在纸层画一次
+  const ctx = hx.ctx;
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(ang);
+  ctx.globalAlpha = (opts.a == null ? 0.16 : opts.a) * 0.72;
+  ctx.fillStyle = opts.color || '#22301a';
+  ctx.beginPath();
+  ctx.ellipse(0, size * 0.055, size * 0.40, size * 0.13, 0, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
+
+/* ===== 30-melon.js ===== */
+/* ============================================================
+   30-melon : 手绘西瓜
+   ============================================================ */
+const MELON = {
+  gBase: '#6fa04a',   // 果皮底色
+  gLight: '#a8c86b',
+  stripe: '#2f5030',  // 深色条纹
+  stripe2: '#3f6b37',
+  flesh: '#e8546a',   // 果肉
+  fleshLt: '#f4848f',
+  rindIn: '#e9f0c8',  // 白瓤
+  seed: '#2a241c',
+  shadow: '#2c3a1e',
+};
+
+/* 圆润的封闭轮廓：带轻微不规则 */
+function melonOutline(cx, cy, R, squash = 1, wobSeed = 3, wobAmt = 0.014, steps = 72) {
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const a = (i / steps) * TAU;
+    const n = (noise3(Math.cos(a) * 1.6 + 10, Math.sin(a) * 1.6, wobSeed) - 0.5) * 2;
+    const n2 = (noise3(Math.cos(a) * 3.4 + 20, Math.sin(a) * 3.4, wobSeed + 7) - 0.5) * 2;
+    const r = R * (1 + n * wobAmt + n2 * wobAmt * 0.45);
+    pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r * squash]);
+  }
+  return pts;
+}
+
+/* 深色条纹：一条带，内缘随噪声起伏，两端自然收尖 */
+function stripeBand(cx, cy, R, a0, halfW, wob, seed) {
+  const N = 26;
+  const edge = (t, sgn) => {
+    const a = a0 + (t - 0.5) * 2 * halfW;
+    const nz = (noise3(t * 2.6, sgn * 5.1, seed) - 0.5) * 2;
+    const taper = Math.pow(Math.sin(clamp(t, 0, 1) * Math.PI), 0.42);
+    const aa = a + nz * wob * taper;
+    const rl = R * (1.015 + (noise3(t * 3.1, 1.7, seed + 3) - 0.5) * 0.02);
+    // 左缘
+    return [cx + Math.cos(aa) * rl, cy + Math.sin(aa) * rl];
+  };
+  const left = [], right = [];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    left.push(edge(t, -1));
+  }
+  for (let i = N; i >= 0; i--) {
+    const t = i / N;
+    // 右缘：从中心向两侧张开
+    const a = a0 + (t - 0.5) * 2 * halfW;
+    const nz = (noise3(t * 2.6 + 3.3, 5.1, seed) - 0.5) * 2;
+    const taper = Math.pow(Math.sin(clamp(t, 0, 1) * Math.PI), 0.42);
+    const aa = a + nz * wob * taper;
+    const rl = R * (0.985 + (noise3(t * 2.4, 9.7, seed + 5) - 0.5) * 0.02);
+    left.push([cx + Math.cos(aa) * rl, cy + Math.sin(aa) * rl]);
+  }
+  return left;
+}
+
+/* 画一颗完整/半颗西瓜（设计坐标） */
+function drawMelon(cx, cy, R, o = {}) {
+  const t = o.t || 0;
+  const seed = o.seed || 11;
+  const R0 = makeRng(seed);
+  const squash = o.squash == null ? 0.94 : o.squash;
+  const ctx = hx.ctx;
+  const detail = o.detail == null ? 1 : o.detail;
+
+  const outline = melonOutline(cx, cy, R, squash, seed, o.wob || 0.013);
+
+  // ---- 落地阴影 ----
+  if (o.shadow !== false) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    for (let i = 0; i < 5; i++) {
+      const w = R * (0.96 + i * 0.05), h = R * (0.10 + i * 0.028);
+      hx.poly(ellipsePts(cx + R * 0.06, cy + R * squash * 0.95 + R * 0.055, w, h, 34, 0, 1), {
+        ink: MELON.shadow, w: 1, a: 0.055, passes: 1, seed: seed + i,
+      });
+      ctx.save();
+      hx.path(ellipsePts(cx + R * 0.06, cy + R * squash * 0.95 + R * 0.055, w, h, 34, 0, 1));
+      ctx.globalAlpha = 0.05; ctx.fillStyle = MELON.shadow; ctx.fill();
+      ctx.restore();
+    }
+    // 用柔和水彩块代替硬阴影
+    const shPts = ellipsePts(cx + R * 0.05, cy + R * squash * 0.9, R * 0.92, R * 0.16, 40, 0, 1);
+    ctx.save();
+    ctx.filter = 'blur(' + (R * 0.035).toFixed(1) + 'px)';
+    hx.wash(shPts, { color: '#38431f', a: 0.10, layers: 4, jitter: R * 0.05, blend: 'multiply', seed: seed + 20 });
+    ctx.restore();
+    ctx.restore();
+  }
+
+  // ---- 果皮底色：多次水彩叠加 ----
+  if (o.fill !== false) {
+    hx.wash(outline, { color: MELON.gBase, a: 0.14, layers: 6, jitter: R * 0.02, wobble: R * 0.01, seed: seed + 30 });
+    hx.wash(outline, { color: MELON.gLight, a: 0.07, layers: 4, jitter: R * 0.03, seed: seed + 31 });
+  }
+
+  // ---- 条纹：球面经线带（解析法向偏移，保证不自交） ----
+  const stripes = o.stripes || 10;
+  const a2 = R, b2 = R * squash;
+  ctx.save();
+  hx.path(outline); ctx.clip();
+  for (let i = 0; i < stripes; i++) {
+    const th0 = ((i + 0.5) / stripes) * Math.PI;
+    const halfW = R * (0.058 + (R0() - 0.5) * 0.017);
+    const N = 56;
+    const left = [], right = [];
+    for (let j = 0; j <= N; j++) {
+      const th = -Math.PI / 2 + (j / N) * Math.PI;
+      const rj = R * (1 + (noise3(th * 0.9, i * 2.1, seed + 12) - 0.5) * 0.012);
+      // 沿经线的有机摆动
+      const sway = (noise3(th * 2.3, i * 1.3, seed + 31) - 0.5) * 0.085 * Math.abs(Math.cos(th));
+      const thS = th + sway;
+      const px = cx + rj * Math.cos(thS);
+      const py = cy + rj * squash * Math.sin(thS);
+      // 椭圆法向（未归一化）：(cos θ / a, sin θ / b)
+      let nx = Math.cos(thS) / a2, ny = Math.sin(thS) / b2;
+      const nl = Math.hypot(nx, ny) || 1;
+      nx /= nl; ny /= nl;
+      // 越靠近两极越细（透视），再叠一层粗细起伏
+      const wob = 1 + (noise3(th * 2.6, i * 0.9, seed + 5) - 0.5) * 0.30;
+      const wj = halfW * (0.40 + 0.62 * Math.abs(Math.cos(th))) * wob;
+      left.push([px - nx * wj, py - ny * wj]);
+      right.push([px + nx * wj, py + ny * wj]);
+    }
+    const band = left.concat(right.slice().reverse());
+    const col = i % 2 ? MELON.stripe : MELON.stripe2;
+    if (o.fill !== false) {
+      hx.wash(band, { color: col, a: 0.17, layers: 4, jitter: R * 0.008, wobble: R * 0.005, seed: seed + 40 + i });
+      hx.wash(band, { color: col, a: 0.09, layers: 2, jitter: R * 0.024, seed: seed + 70 + i });
+    }
+    if (detail > 0.5) {
+      hx.poly(left, { ink: MELON.stripe, w: R * 0.0065, a: 0.34, passes: 1, jitter: R * 0.004, seed: seed + 100 + i });
+      hx.poly(right, { ink: MELON.stripe, w: R * 0.0065, a: 0.34, passes: 1, jitter: R * 0.004, seed: seed + 200 + i });
+    }
+  }
+  ctx.restore();
+
+  // ---- 轮廓：粗墨线，复描 3 遍 ----
+  ctx.save();
+  hx.path(outline); ctx.clip();
+  if (detail > 0.45) {
+    // 瓜皮上的分块网纹
+    for (let i = 0; i < 16; i++) {
+      const a = R0() * TAU, a2 = a + 0.5 + R0() * 0.7;
+      const r1 = R * (0.15 + R0() * 0.8), r2 = R * (0.15 + R0() * 0.8);
+      hx.poly([
+        [cx + Math.cos(a) * r1, cy + Math.sin(a) * r1 * squash],
+        [cx + Math.cos((a + a2) / 2) * Math.max(r1, r2) * 1.02, cy + Math.sin((a + a2) / 2) * Math.max(r1, r2) * squash],
+        [cx + Math.cos(a2) * r2, cy + Math.sin(a2) * r2 * squash],
+      ], { ink: '#cfe09a', w: 1.1, a: 0.30, passes: 1, jitter: R * 0.01, seed: seed + 80 + i });
+    }
+  }
+  ctx.restore();
+
+  // ---- 体积：明暗 ----
+  if (detail > 0.3) {
+    ctx.save();
+    hx.path(outline); ctx.clip();
+    // 左下暗部排线
+    const dark = ellipsePts(cx - R * 0.32, cy + R * 0.28, R * 0.84, R * 0.84, 44, 0, 1);
+    hx.hatch(dark, { n: 13, angle: 0.85, ink: '#22351c', a: 0.10, w: 1.1, span: 1.0, cross: false, seed: seed + 90 });
+    hx.hatch(dark, { n: 9, angle: 0.45, ink: '#22351c', a: 0.07, w: 1.0, span: 0.9, cross: false, seed: seed + 95 });
+    // 暗部再加一层淡水彩
+    hx.wash(ellipsePts(cx - R * 0.40, cy + R * 0.32, R * 0.78, R * 0.76, 40, 0, 1), { color: '#2b401f', a: 0.045, layers: 4, seed: seed + 91 });
+    // 右上高光
+    hx.wash(ellipsePts(cx + R * 0.30, cy - R * 0.34, R * 0.28, R * 0.20, 36, -0.5, 1), { color: '#ffffff', a: 0.13, layers: 5, jitter: R * 0.05, seed: seed + 92 });
+    hx.poly(arcPts(cx + R * 0.05, cy - R * 0.02, R * 0.80, -2.45, -1.72, 16), { ink: '#f2f7dc', w: R * 0.02, a: 0.30, passes: 2, jitter: R * 0.01, seed: seed + 93 });
+    ctx.restore();
+  }
+
+  // ---- 外轮廓描边 ----
+  hx.poly(outline, { ink: '#1f2a18', w: o.lineW || 3.0, a: 0.92, passes: 3, jitter: 2.2, wobble: 1.6, seed: seed + 100 });
+
+  // ---- 瓜蒂 ----
+  if (o.stem !== false) {
+    const sx = cx + Math.sin(0.35) * R * 0.1, sy = cy - R * squash * 0.985;
+    for (let i = 0; i < 3; i++) {
+      const a = -Math.PI / 2 + (i - 1) * 0.42 + (R0() - 0.5) * 0.12;
+      const L = R * (0.11 + R0() * 0.05);
+      hx.poly([[sx, sy], [sx + Math.cos(a) * L * 0.6, sy + Math.sin(a) * L * 0.6], [sx + Math.cos(a) * L, sy + Math.sin(a) * L]], {
+        ink: '#4a5a2a', w: R * 0.022, a: 0.85, passes: 2, jitter: R * 0.008, seed: seed + 110 + i,
+      });
+    }
+  }
+  ctx.save();
+  hx.path(outline); ctx.clip();
+  ctx.restore();
+}
+
+/* ============================================================
+   微观瓜皮表面：用于极特写镜头
+   把瓜皮画成一片带弧度的粗糙表面（每一帧根据相机偏移滚动纹理）
+   ============================================================ */
+function drawRindSurface(o) {
+  const ctx = hx.ctx;
+  const {
+    W, H,                      // 设计分辨率
+    offX = 0, offY = 0,        // 表面滚动偏移
+    zoom = 1,
+    R = 900,                   // 巨大瓜体半径（用于弧线）
+    t = 0,
+    detail = 1,
+  } = o;
+
+  // --- 底色：水彩铺陈 ---
+  const basePts = [[-40, -40], [W + 40, -40], [W + 40, H + 40], [-40, H + 40]];
+  hx.wash(basePts, { color: MELON.gBase, a: 0.16, layers: 4, jitter: 30, blend: 'multiply', seed: 501 });
+  hx.wash(basePts, { color: MELON.gLight, a: 0.09, layers: 3, jitter: 40, blend: 'multiply', seed: 502 });
+
+  // --- 深色条纹（缓坡状的大色带，沿表面弯曲） ---
+  const bands = 5;
+  for (let i = 0; i < bands; i++) {
+    const cx0 = W * (0.06 + i * 0.235) - ((offX * 0.35) % (W * 1.2));
+    const pts = [];
+    const N = 22;
+    for (let k = 0; k <= N; k++) {
+      const yy = (k / N) * (H + 160) - 80;
+      const rad = R;
+      const xx = cx0 + Math.sin((yy + offY * 0.3) / rad + i) * rad * 0.14 + Math.sin(k * 1.3 + i) * 14;
+      const wdt = W * (0.075 + (i % 3) * 0.022) * (0.75 + 0.5 * Math.abs(Math.sin(k * 0.7 + i * 2)));
+      pts.push([xx, yy, wdt]);
+    }
+    // 用左右两条边组成色带
+    const band = [];
+    for (const p of pts) band.push([p[0] - p[2] * 0.5, p[1]]);
+    for (let k = pts.length - 1; k >= 0; k--) band.push([pts[k][0] + pts[k][2] * 0.5, pts[k][1]]);
+    hx.wash(band, { color: i % 2 ? MELON.stripe : MELON.stripe2, a: 0.10, layers: 3, jitter: 16, wobble: 8, seed: 600 + i });
+    if (detail > 0.5) {
+      hx.poly(band, { ink: MELON.stripe, w: 2.2, a: 0.22, passes: 1, jitter: 3, wobble: 2, seed: 700 + i });
+    }
+  }
+
+  // --- 弧面明暗：巨大果实表面的光影缓坡 ---
+  ctx.save();
+  ctx.globalCompositeOperation = 'multiply';
+  // 暗侧
+  for (let i = 0; i < 12; i++) {
+    const a = 0.020;
+    hx.wash(ellipsePts(W * 0.5 + Math.sin(offX * 0.001) * 300, H * 1.05, W * 0.95, H * 0.75, 40, 0, 1), {
+      color: '#2f4720', a, layers: 1, jitter: 60, blend: 'multiply', seed: 800 + i,
+    });
+  }
+  ctx.restore();
+  if (detail > 0.3 && fillOn) {
+    // 亮侧高光（在纸层上直接提亮）
+    hx.wash(ellipsePts(W * 0.34, -H * 0.30, W * 0.60, H * 0.55, 36, 0, 1), { color: '#ffffff', a: 0.075, layers: 4, jitter: 70, blend: 'source-over', seed: 810 });
+  }
+
+  // --- 表面瑕疵：气孔 / 凹点 / 蜡粉 / 绒毛 ---
+  const R2 = makeRng(4242);
+  const PG = 460;                      // 每屏粒子数
+  // 先按世界坐标排序（简易深度感）
+  for (let i = 0; i < PG; i++) {
+    const wx = R2() * W * 1.4 - W * 0.2;
+    const wy = R2() * H * 1.4 - H * 0.2;
+    const r = R2();
+    const px = wx - (offX % 1e6) * 0.25;
+    const py = wy - (offY % 1e6) * 0.25;
+    if (px < -60 || px > W + 60 || py < -60 || py > H + 60) continue;
+    const dep = fbm(wx * 0.004, wy * 0.004, 3.3, 3);
+    if (r < 0.34) {
+      // 气孔
+      const s = (6 + R2() * 16) * zoom * (0.6 + dep);
+      const a = 0.10 + R2() * 0.16;
+      hx.ellipse(px, py, s * (1.0 + R2() * 0.4), s * 0.72, {
+        ink: '#3c5527', w: 1.6, a, passes: 1, steps: 14, seed: (R2() * 1e9) | 0, start: R2() * 6,
+      });
+      ctx.save(); ctx.globalCompositeOperation = 'multiply';
+      hx.wash(ellipsePts(px, py + s * 0.25, s * 0.9, s * 0.55, 14, 0, 1), { color: '#2c4419', a: 0.10, layers: 1, jitter: 3, blend: 'multiply', seed: (R2() * 1e9) | 0 });
+      ctx.restore();
+      if (R2() < 0.45) {
+        hx.poly(arcPts(px, py - s * 0.18, s * 0.92, -2.6, -0.6, 8), { ink: '#f4f9d8', w: 2.0, a: 0.22, passes: 1, seed: (R2() * 1e9) | 0 });
+      }
+    } else if (r < 0.55) {
+      // 蜡粉 / 小亮斑
+      const s = 3 + R2() * 9;
+      ctx.save();
+      ctx.globalAlpha = 0.16 + R2() * 0.22;
+      ctx.fillStyle = '#eef6cf';
+      ctx.beginPath(); ctx.ellipse(px, py, s, s * 0.62, R2() * 3, 0, TAU); ctx.fill();
+      ctx.restore();
+    } else if (r < 0.72) {
+      // 绒毛
+      const s = 10 + R2() * 22, a = -1.9 + R2() * 1.1;
+      hx.poly([[px, py], [px + Math.cos(a) * s * 0.6, py + Math.sin(a) * s * 0.6], [px + Math.cos(a + 0.35) * s, py + Math.sin(a + 0.35) * s]], {
+        ink: '#dfe9b4', w: 1.2, a: 0.22 + R2() * 0.2, passes: 1, seed: (R2() * 1e9) | 0,
+      });
+    } else if (r < 0.80) {
+      // 深色斑点
+      const s = 2.5 + R2() * 6;
+      ctx.save(); ctx.globalAlpha = 0.10 + R2() * 0.18; ctx.fillStyle = '#2a3f18';
+      ctx.beginPath(); ctx.arc(px, py, s, 0, TAU); ctx.fill(); ctx.restore();
+    }
+  }
+
+  // --- 细密排线，强化"纸上的笔触" ---
+  if (detail > 0.6) {
+    for (let i = 0; i < 40; i++) {
+      const yy = (i / 40) * H + ((offY * 0.15) % (H / 40));
+      const amp = 10 + fbm(i * 0.4, offX * 0.002, 1.2, 3) * 26;
+      const pts = [];
+      for (let k = 0; k <= 12; k++) {
+        pts.push([(k / 12) * (W + 60) - 30, yy + Math.sin(k * 0.6 + i) * amp * 0.25]);
+      }
+      hx.poly(pts, { ink: '#597334', w: 1.5, a: 0.055 + 0.05 * fbm(i * 0.3, 4, 0.3, 2), passes: 1, jitter: 3, seed: 900 + i });
+    }
+  }
+}
+
+/* 一小块多汁的果肉（蚂蚁的"宝藏"） */
+function drawFleshChunk(x, y, s, rot, o = {}) {
+  const ctx = hx.ctx;
+  const seed = o.seed || 77;
+  const R = makeRng(seed);
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(rot);
+  // 白瓤 + 红肉
+  const outer = [];
+  for (let i = 0; i <= 14; i++) {
+    const a = (i / 14) * TAU;
+    const rr2 = s * (0.95 + (R() - 0.5) * 0.22);
+    outer.push([Math.cos(a) * rr2, Math.sin(a) * rr2 * 0.72]);
+  }
+  hx.wash(outer, { color: '#f4f7d8', a: 0.16, layers: 4, jitter: s * 0.06, seed: seed + 1 });
+  const inner = outer.map((p) => [p[0] * 0.8, p[1] * 0.8]);
+  hx.wash(inner, { color: MELON.flesh, a: 0.20, layers: 5, jitter: s * 0.05, seed: seed + 2 });
+  hx.wash(inner.map((p) => [p[0] * 0.72, p[1] * 0.72]), { color: MELON.fleshLt, a: 0.14, layers: 3, jitter: s * 0.05, seed: seed + 3 });
+  hx.poly(outer, { ink: '#c5cf94', w: s * 0.035, a: 0.8, passes: 2, jitter: s * 0.02, seed: seed + 4 });
+  hx.poly(inner, { ink: '#c85068', w: s * 0.03, a: 0.6, passes: 2, jitter: s * 0.02, seed: seed + 5 });
+  // 籽
+  for (let i = 0; i < 3; i++) {
+    const a = R() * TAU, d = R() * s * 0.55;
+    const sx = Math.cos(a) * d, sy = Math.sin(a) * d * 0.6;
+    ctx.save(); ctx.translate(sx, sy); ctx.rotate(R() * TAU);
+    hx.poly(ellipsePts(0, 0, s * 0.11, s * 0.055, 12, 0, 1), { ink: MELON.seed, w: s * 0.02, a: 0.85, passes: 2, jitter: s * 0.012, seed: seed + 10 + i });
+    ctx.save(); ctx.globalAlpha = 0.9; ctx.fillStyle = '#241f18';
+    ctx.beginPath(); ctx.ellipse(0, 0, s * 0.085, s * 0.042, 0, 0, TAU); ctx.fill(); ctx.restore();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+/* 叶与卷须（装饰边角） */
+function drawLeaf(x, y, s, rot, o = {}) {
+  const ctx = hx.ctx;
+  const R = makeRng(o.seed || 31);
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(rot); ctx.scale(s, s);
+  const pts = [];
+  for (let i = 0; i <= 18; i++) {
+    const tt = i / 18;
+    const a = Math.PI * (0.5 - tt);
+    const r = 1;
+    const wdt = Math.sin(tt * Math.PI) * 0.46;
+    pts.push([tt * 2 - 1, -wdt]);
+  }
+  for (let i = 18; i >= 0; i--) {
+    const tt = i / 18;
+    const wdt = Math.sin(tt * Math.PI) * 0.46 * (1 + (R() - 0.5) * 0.1);
+    pts.push([tt * 2 - 1, wdt]);
+  }
+  if (fillOn) { ctx.save(); hx.path(pts); ctx.clip(); hx.wash(pts, { color: '#6c9a45', a: 0.15, layers: 3, jitter: 0.03, seed: (o.seed || 31) + 1 }); ctx.restore(); }
+  hx.poly(pts, { ink: '#3d5c25', w: 0.03, a: 0.8, passes: 2, jitter: 0.012, wobble: 0.02, seed: (o.seed || 31) + 2 });
+  // 叶脉
+  hx.poly([[-1, 0], [1, 0]], { ink: '#3d5c25', w: 0.022, a: 0.7, passes: 1, seed: (o.seed || 31) + 3 });
+  for (let i = 1; i < 6; i++) {
+    const tt = i / 6;
+    hx.poly([[tt * 2 - 1, 0], [tt * 2 - 1 + 0.16, -0.30 * Math.sin(tt * Math.PI)]], { ink: '#4a6d2c', w: 0.014, a: 0.55, passes: 1, seed: (o.seed || 31) + 10 + i });
+    hx.poly([[tt * 2 - 1, 0], [tt * 2 - 1 + 0.16, 0.30 * Math.sin(tt * Math.PI)]], { ink: '#4a6d2c', w: 0.014, a: 0.55, passes: 1, seed: (o.seed || 31) + 20 + i });
+  }
+  ctx.restore();
+}
+
+/* 卷须 */
+function drawTendril(x, y, s, rot, o = {}) {
+  const ctx = hx.ctx;
+  const R = makeRng(o.seed || 55);
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(rot);
+  const pts = [];
+  const N = 30;
+  for (let i = 0; i <= N; i++) {
+    const tt = i / N;
+    const spiral = tt > 0.55 ? (tt - 0.55) / 0.45 : 0;
+    const a = spiral * Math.PI * 4.2;
+    const r = 0.34 * spiral;
+    pts.push([tt * s * 1.15, Math.sin(a) * r * s * 0.5 + (R() - 0.5) * 1.5]);
+  }
+  hx.poly(pts, { ink: '#5c7d33', w: s * 0.022, a: 0.8, passes: 2, jitter: s * 0.008, wobble: s * 0.01, seed: (o.seed || 55) + 1 });
+  ctx.restore();
+}
+
+
+/* ===== 40-main.js ===== */
+/* ============================================================
+   40-main : 画布管线 / 相机 / 分镜时间轴 / 导出接口
+   ============================================================ */
+const DW = 1600, DH = 900;          // 设计分辨率
+const FPS = 30;
+const DURATION = 21.0;              // 秒
+const TOTAL = Math.round(DURATION * FPS);
+
+let OUTW = 1280, OUTH = 720;
+let cvPaper, ctxPaper, cvScene, ctxScene, cvTooth, cvText, cvGrain, cvFX, cvOut, ctxOut, cvPaperTex;
+let SCALE = 1;
+let curDetail = 1;
+let curT = 0;
+
+/* ---------- 全局开关（按绘制阶段切换） ---------- */
+let strokeOn = true;
+let fillOn = true;
+function setStroke(v) { strokeOn = v; }
+function setFill(v) { fillOn = v; }
+/* 把水彩层画到纸层（真·multiply 叠色），墨线层单画 */
+function usePaint() { hx.setCtx(ctxPaper, 1); fillOn = true; strokeOn = true; }
+function useInk() { hx.setCtx(ctxScene, 1); fillOn = false; strokeOn = true; }
+
+/* 笔触/水彩开关拦截：几何照算，只是选择落在哪个图层 */
+(function wrapPrimitives() {
+  const oPoly = hx.poly, oHatch = hx.hatch, oStip = hx.stipple;
+  hx.poly = function (p, o) { if (strokeOn && p && p.length > 1) oPoly.call(hx, p, o); };
+  hx.hatch = function (p, o) { if (strokeOn && p && p.length > 2) oHatch.call(hx, p, o); };
+  hx.stipple = function (p, o) { if (strokeOn && p && p.length > 2) oStip.call(hx, p, o); };
+
+  const oWash = hx.wash;
+  hx.wash = function (p, o) { if (fillOn && p && p.length > 2) oWash.call(hx, p, o); };
+})();
+
+/* ---------- 相机 ---------- */
+let CAMP = { x: DW / 2, y: DH / 2, z: 1, rot: 0 };
+function setCamera(p) {
+  CAMP = p;
+  for (const c of [ctxPaper, ctxScene]) {
+    const s = SCALE * p.z;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    if (p.rot) {
+      c.translate(DW / 2, DH / 2); c.rotate(p.rot); c.translate(-DW / 2, -DH / 2);
+    }
+    c.translate(DW / 2 - p.x * s, DH / 2 - p.y * s);
+    c.scale(s, s);
+  }
+}
+/* 两遍绘制：先水彩（纸层），后墨线（笔触层） */
+let PH = { paint: true, ink: false };
+function paintShot(fn) {
+  PH = { paint: true, ink: false }; usePaint(); fn(curT);
+  PH = { paint: false, ink: true }; useInk(); fn(curT);
+}
+/* 由阶段决定的选项：水彩只落纸层，墨线只落笔触层 */
+function pw(o) { o = o || {}; return Object.assign({}, o, { a: PH.ink ? (o.a != null ? o.a : 1) : 0 }); }
+function pf(o) { o = o || {}; return Object.assign({}, o, { a: PH.paint ? (o.a != null ? o.a : 1) : 0 }); }
+
+/* ---------- 烘焙静态资源 ---------- */
+function bakeAll() {
+  cvPaperTex = bakePaper(DW, DH);
+  cvTooth = bakeTooth(DW, DH);
+  cvGrain = bakeGrain(DW, DH);
+  cvText = document.createElement('canvas');
+  cvText.width = OUTW; cvText.height = OUTH;
+  bakeText();
+  bakeFX();
+}
+/* 页边杂物：铅笔屑、脏迹（烘焙一次） */
+function bakeFX() {
+  cvFX = document.createElement('canvas'); cvFX.width = DW; cvFX.height = DH;
+  const fx = cvFX.getContext('2d');
+  const R = makeRng(555);
+  for (let i = 0; i < 260; i++) {
+    const edge = R();
+    let x, y;
+    if (edge < 0.25) { x = R() * DW; y = R() * 40; }
+    else if (edge < 0.5) { x = R() * DW; y = DH - R() * 40; }
+    else if (edge < 0.75) { x = R() * 40; y = R() * DH; }
+    else { x = DW - R() * 40; y = R() * DH; }
+    fx.globalAlpha = 0.03 + R() * 0.09;
+    fx.fillStyle = '#4a443a';
+    fx.beginPath(); fx.arc(x, y, 0.5 + R() * 2.2, 0, TAU); fx.fill();
+  }
+}
+function bakeGrain(W, H) {
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(W, H); const d = img.data;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4;
+    const g = noise3(x * 1.31, y * 1.31, 3.3);
+    const v = (g - 0.5) * 2;
+    d[i] = v > 0 ? 255 : 0; d[i + 1] = v > 0 ? 255 : 0; d[i + 2] = v > 0 ? 255 : 0;
+    d[i + 3] = Math.abs(v) * 255 * 0.10;
+  }
+  ctx.putImageData(img, 0, 0);
+  return cv;
+}
+
+/* 画一段"手写体"文字到 cvText（输出分辨率下） */
+function handText(ctx, str, x, y, size, o = {}) {
+  const passes = o.passes || 2;
+  const ink = o.ink || '#2a251f';
+  ctx.save();
+  ctx.font = `${o.weight || 600} ${size}px ${o.font || '"PingFang SC","Hiragino Sans GB","Songti SC",serif'}`;
+  ctx.textAlign = o.align || 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = ink;
+  for (let k = 0; k < passes; k++) {
+    ctx.save();
+    ctx.globalAlpha = (o.a == null ? 0.85 : o.a) * (k === 0 ? 1 : 0.5);
+    const dx = (rnd() - 0.5) * size * 0.035, dy = (rnd() - 0.5) * size * 0.03;
+    ctx.translate(dx, dy);
+    ctx.fillText(str, x, y);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+function bakeText() {
+  const c = cvText.getContext('2d');
+  const s = OUTH / DH;  // 设计→输出
+  c.clearRect(0, 0, OUTW, OUTH);
+  c.save();
+  // 标题
+  handText(c, '西瓜上的蚂蚁', OUTW * 0.5, OUTH - 26 * s, 26 * s, { a: 0.72, weight: 500 });
+  // 手绘下划线
+  c.save();
+  c.globalAlpha = 0.4;
+  c.strokeStyle = '#2a251f'; c.lineWidth = 1.2;
+  const y0 = OUTH - 26 * s + 21 * s;
+  for (let k = 0; k < 2; k++) {
+    c.beginPath();
+    const w = OUTW * (0.115 + k * 0.004);
+    for (let i = 0; i <= 24; i++) {
+      const tt = i / 24;
+      const px = OUTW * 0.5 - w + tt * w * 2;
+      const py = y0 + Math.sin(tt * 9 + k * 2) * 1.6 + (rnd() - 0.5) * 1.6;
+      if (i === 0) c.moveTo(px, py); else c.lineTo(px, py);
+    }
+    c.stroke();
+  }
+  c.restore();
+  c.restore();
+}
+
+/* ---------- 分镜 ---------- */
+const SHOTS = [
+  { name: 'wide', dur: 4.0 },
+  { name: 'macro', dur: 5.5 },
+  { name: 'limb', dur: 4.0 },
+  { name: 'caravan', dur: 4.0 },
+  { name: 'close', dur: 3.5 },
+];
+(function () { let acc = 0; for (const s of SHOTS) { s.t0 = acc; acc += s.dur; s.t1 = acc; } })();
+const TOTAL_S = SHOTS[SHOTS.length - 1].t1;
+
+/* 镜头进度 */
+function shotOf(t) {
+  for (const s of SHOTS) if (t < s.t1 || s === SHOTS[SHOTS.length - 1]) return { s, u: clamp(inv(s.t0, s.t1, t), 0, 1) };
+}
+/* 蚂蚁姿态：沿路径行走 */
+function walk(ant, t) {
+  const p = ant.path(t);
+  const q = ant.path(t + 0.06);
+  const ang = Math.atan2(q[1] - p[1], q[0] - p[0]);
+  return { x: p[0], y: p[1], ang };
+}
+/* 带运动残影地画一只蚂蚁 */
+function antWithBlur(x, y, ang, size, t, o = {}) {
+  const n = o.mb == null ? 3 : o.mb;
+  for (let i = n - 1; i >= 0; i--) {
+    const back = i * 0.055 * (o.speed || 1);
+    const bx = x - Math.cos(ang) * size * back * 0.2;
+    const by = y - Math.sin(ang) * size * back * 0.2;
+    drawAnt(bx, by, ang, size, Object.assign({}, o, {
+      t: t - back * 0.5,
+      alpha: (o.alpha == null ? 1 : o.alpha) * (i === 0 ? 1 : 0.22 / i),
+      seed: o.seed,
+    }));
+  }
+}
+
+/* ============================================================
+   Shot 1 — 全景：整颗西瓜，蚂蚁小得像灰尘
+   ============================================================ */
+function shotWide(t, u) {
+  const R = 340;
+  const z = (1.02 - 0.05 * smoothstep(u)) * 1.0;
+  const cx = DW / 2 + Math.sin(u * 1.4) * 26;
+  const cy = DH / 2 + 34 + Math.cos(u * 1.1) * 10;
+  setCamera({ x: cx, y: cy, z: z * 0.98, rot: Math.sin(u * 0.9) * 0.012 });
+  curDetail = 1;
+
+  // 背景：几笔极淡的"空气"
+  hx.wash([[120, 210], [420, 150], [500, 380], [170, 430]], { color: '#c3d19c', a: 0.05, layers: 2, jitter: 60, seed: 101 });
+  hx.wash([[DW - 430, 120], [DW - 130, 90], [DW - 110, 330], [DW - 400, 360]], { color: '#c3d19c', a: 0.045, layers: 2, jitter: 60, seed: 102 });
+  // 叶与卷须做边角
+  drawLeaf(165, 705, 110, -0.42, { seed: 12 });
+  drawLeaf(DW - 175, 175, 92, 2.5, { seed: 21 });
+  drawTendril(DW - 235, 545, 120, -1.05, { seed: 33 });
+
+  drawMelon(cx, cy, R, { t, seed: 11, phase: 0.4, stripes: 10 });
+
+  // 三只小蚂蚁在瓜面上缓缓爬行
+  const ants = [
+    { path: (tt) => { const a = -2.0 + inv(t, 0, 8) * 0.9; return [cx + Math.cos(a) * R * 0.99, cy + Math.sin(a) * R * 0.99 * 0.94]; }, size: 13, sp: 0.9, seed: 71 },
+    { path: (tt) => { const a = -0.6 + inv(t, 0, 8) * 0.7; return [cx + Math.cos(a) * R * 0.99, cy + Math.sin(a) * R * 0.99 * 0.94]; }, size: 11, sp: 1.1, seed: 72 },
+    { path: (tt) => { const a = 1.2 + inv(t, 0, 8) * -0.5; return [cx + Math.cos(a) * R * 0.99, cy + Math.sin(a) * R * 0.99 * 0.94]; }, size: 10, sp: 1.3, seed: 73 },
+  ];
+  for (const a of ants) {
+    const s = walk(a, t);
+    antWithBlur(s.x, s.y, s.ang, a.size, t * a.sp, { seed: a.seed, ink: '#1c1a16', t: t * 1.6, speed: a.sp, mb: 1 });
+  }
+}
+
+/* ============================================================
+   Shot 2 — 微距：蚂蚁在巨大的瓜皮"原野"上跋涉
+   ============================================================ */
+function shotMacro(t, u) {
+  const z = lerp(1.85, 2.95, smoothstep(Math.min(1, u * 1.15)));
+  const ox = t * 34, oy = Math.sin(t * 0.35) * 18 + t * 6;
+  const cx = 700 + u * 170, cy = DH * 0.52 - u * 40;
+  setCamera({ x: cx, y: cy, z, rot: Math.sin(t * 0.25) * 0.006 });
+  curDetail = 1;
+
+  drawRindSurface({ W: DW, H: DH, offX: ox, offY: oy, zoom: 1.6, R: 760, t, detail: 1 });
+
+  // 主角蚂蚁：从左下爬向右上（沿一条缓弯的路）
+  const p = (tt) => {
+    const s = clamp(inv(t, 0.2, 5.0), 0, 1);
+    const x = lerp(520, DW - 420, s) + Math.sin(s * 3.1) * 40;
+    const y = lerp(DH * 0.66, DH * 0.48, s) + Math.sin(s * 5.0 + 1) * 26;
+    return [x, y];
+  };
+  const s0 = p(t), s1 = p(t + 0.08);
+  const ang = Math.atan2(s1[1] - s0[1], s1[0] - s0[0]);
+  const size = lerp(140, 185, smoothstep(clamp(inv(t, 0.3, 2.2), 0, 1)));
+
+  drawAntShadow(s0[0] + 8, s0[1] + size * 0.26, ang, size, { a: 0.20 });
+  antWithBlur(s0[0], s0[1], ang, size, t * 1.25, { seed: 201, mb: 3, speed: 1, t: t * 1.25 });
+
+  // 远处第二只蚂蚁（小，虚，强调纵深）
+  const p2 = (tt) => {
+    const s = clamp(inv(t, 0.0, 7.0), 0, 1);
+    return [lerp(DW - 40, 500, s * 0.6) + 100, lerp(360, 420, Math.sin(s * 2.2))];
+  };
+  const q0 = p2(t), q1 = p2(t + 0.1);
+  const a2 = Math.atan2(q1[1] - q0[1], q1[0] - q0[0]);
+  drawAntShadow(q0[0] + 4, q0[1] + 16, a2, 68, { a: 0.13 });
+  antWithBlur(q0[0], q0[1], a2, 68, t * 1.7, { seed: 202, alpha: 0.62, mb: 2, detail: 0.9, t: t * 1.7 });
+
+  // 一颗悬在瓜皮上的水珠（用高光表现）
+  const dx = 1290, dy = 250 + Math.sin(t * 0.8) * 3;
+  hx.wash(ellipsePts(dx, dy, 46, 40, 26, 0, 1), { color: '#4d6a2c', a: 0.07, layers: 3, jitter: 4, seed: 311 });
+  hx.ellipse(dx, dy, 46, 40, { ink: '#33501f', w: 3.4, a: 0.55, passes: 2, jitter: 2.4, seed: 312 });
+  hx.poly(arcPts(dx - 6, dy - 4, 32, -2.5, -1.15, 10), { ink: '#fbfff0', w: 7, a: 0.55, passes: 2, seed: 313 });
+  ctxPaper.save(); ctxPaper.globalAlpha = 0.5; ctxPaper.fillStyle = '#ffffff';
+  ctxPaper.beginPath(); ctxPaper.ellipse(dx - 14, dy + 14, 8, 6, 0.4, 0, TAU); ctxPaper.fill(); ctxPaper.restore();
+}
+
+/* ============================================================
+   Shot 3 — 巨物边缘：瓜面与背景的分界，一只蚂蚁翻越"地平线"
+   ============================================================ */
+function shotLimb(t, u) {
+  const z = lerp(1.9, 2.5, smoothstep(Math.min(1, u * 1.2)));
+  setCamera({ x: 780 - u * 60, y: DH * 0.52 + u * 20, z, rot: Math.sin(t * 0.4) * 0.006 });
+  curDetail = 1;
+
+  // 瓜面只占左边：先铺满整屏，再在右侧用纸色盖出"界外"
+  drawRindSurface({ W: DW, H: DH, offX: t * 18, offY: t * 6, zoom: 1.2, R: 1100, t, detail: 1 });
+
+  // 地平线：巨大的弧
+  const arc = [];
+  const N = 40;
+  const edgeX = DW * 0.80 + Math.sin(t * 0.5) * 14;
+  for (let i = 0; i <= N; i++) {
+    const tt = i / N;
+    const yy = -60 + tt * (DH + 120);
+    const xx = edgeX + Math.cos(tt * Math.PI * 1.1) * 34 - Math.pow(tt - 0.5, 2) * 46 + Math.sin(tt * 6.2 + t * 0.6) * 5;
+    arc.push([xx, yy]);
+  }
+  // 界外：用纸色盖掉瓜面（只在墨线阶段画，盖在纸层的瓜面之上）
+  const outside = arc.concat([[DW + 200, DH + 120], [DW + 200, -60]]);
+  if (PH.ink) {
+    ctxScene.save();
+    ctxScene.globalCompositeOperation = 'source-over';
+    ctxScene.globalAlpha = 1;
+    ctxScene.fillStyle = '#faf7ee';
+    hx.path(outside); ctxScene.fill();
+    ctxScene.restore();
+  }
+  hx.poly(arc, { ink: '#1f2a18', w: 12, a: 0.9, passes: 3, jitter: 4, wobble: 3, seed: 401 });
+  hx.poly(arcPts(edgeX + 40, DH * 0.5, 200, -1.4, 1.4, 20), pf({ ink: '#7d9450', w: 5, a: 0.35, passes: 2, seed: 402 }));
+
+  // 地平线右侧：纸面上的排线（表现"瓜体之外的空气"）
+  hx.hatch([[edgeX + 30, 0], [DW + 60, 0], [DW + 60, DH], [edgeX + 20, DH]], { n: 34, angle: 1.15, ink: '#8a9370', a: 0.10, w: 2, seed: 410 });
+
+  // 主角蚂蚁：从瓜面翻越地平线
+  const s = clamp(inv(t, 0.35, 3.4), 0, 1);
+  const px = lerp(520, edgeX - 40, s);
+  const py = lerp(DH * 0.70, DH * 0.48, s) + Math.sin(s * 4.6) * 22;
+  const jitter2 = s > 0.86 ? Math.sin((s - 0.86) * 60) * 3 : 0;
+  const ang = -0.28 + Math.sin(s * 3) * 0.12;
+  const size = lerp(125, 158, s);
+  drawAntShadow(px + 12, py + 46, ang, size, { a: 0.16 });
+  antWithBlur(px + jitter2, py, ang, size, t * 1.3, { seed: 421, mb: 2, t: t * 1.3 });
+
+  // 一只小蚂蚁正从下方爬上来（对比尺度）
+  const s3 = clamp(inv(t, 1.6, 5.2), 0, 1);
+  const bx = lerp(880, 1320, s3), by = lerp(DH + 60, DH * 0.60, s3);
+  const ang3 = -0.5;
+  drawAntShadow(bx + 4, by + 24, ang3, 76, { a: 0.10 });
+  antWithBlur(bx, by, ang3, 76, t * 1.6, { seed: 422, alpha: 0.7, mb: 2, detail: 0.85, t: t * 1.6 });
+}
+
+/* ============================================================
+   Shot 4 — 搬运：一队蚂蚁扛着一块果肉
+   ============================================================ */
+function shotCaravan(t, u) {
+  const z = lerp(1.5, 1.02, smoothstep(u));
+  setCamera({ x: 810 + u * 10, y: DH * 0.50, z, rot: Math.sin(t * 0.3) * 0.007 });
+  curDetail = 1;
+
+  drawRindSurface({ W: DW, H: DH, offX: -t * 22, offY: Math.sin(t * 0.3) * 10, zoom: 1.35, R: 820, t, detail: 1 });
+
+  // 队伍：一只在前，两只在后果肉（闭环路径，恒在画面内循环）
+  const baseY = DH * 0.64 + Math.sin(t * 0.5) * 6;
+  const SPAN = DW + 620;
+  const march = (t + 1.4) * 84;
+  const pathOf = (off) => (tt) => {
+    const xx = (((DW + 220 - march - off) % SPAN) + SPAN) % SPAN - 220; // -220 .. DW+400
+    return [xx, baseY + Math.sin(xx * 0.0042) * 24 + Math.sin(tt * 2.2) * 4];
+  };
+
+  const crew = [
+    { off: 0, size: 178, seed: 501 },
+    { off: 120, size: 172, seed: 502 },
+    { off: 236, size: 165, seed: 503 },
+    { off: 352, size: 156, seed: 504 },
+  ];
+  const fleshW = 118;
+  const crewList = [];
+  for (const c of crew) {
+    const pp = pathOf(c.off);
+    const p0 = pp(t), p1 = pp(t + 0.08);
+    const ang = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]);
+    crewList.push({ x: p0[0], y: p0[1], ang, size: c.size, seed: c.seed, off: c.off });
+  }
+  // 果肉位置：由最前面两只蚂蚁的中点决定
+  const lead = crewList[0], second = crewList[1];
+  const fx = (lead.x + second.x) / 2 + 40;
+  const fy = (lead.y + second.y) / 2 - lead.size * 0.52;
+
+  for (const a of crewList) {
+    drawAntShadow(a.x + 6, a.y + a.size * 0.22, a.ang, a.size, { a: 0.15 });
+  }
+  // 先画后面两只（被果肉遮住）
+  for (let i = crewList.length - 1; i >= 2; i--) {
+    const a = crewList[i];
+    antWithBlur(a.x, a.y, a.ang, a.size, t * 1.2 + i, { seed: a.seed, mb: 2, t: t * 1.3 + i, speed: 1 });
+  }
+  // 果肉
+  drawFleshChunk(fx, fy, fleshW, Math.sin(t * 1.4) * 0.12, { seed: 601 });
+  // 前面两只（抬起前足顶着果肉）
+  for (let i = 1; i >= 0; i--) {
+    const a = crewList[i];
+    antWithBlur(a.x, a.y, a.ang, a.size, t * 1.2 + i, { seed: a.seed, mb: 2, t: t * 1.3 + i, speed: 1 });
+  }
+  // 果肉上的小蚂蚁（搭便车）
+  const rider = { x: fx - 20, y: fy - 26, ang: -0.2 };
+  drawAntTiny(rider.x, rider.y, rider.ang, 34, { alpha: 0.85, seed: 605 });
+}
+
+/* ============================================================
+   Shot 5 — 收尾：拉远，西瓜上留下被啃出的缺口
+   ============================================================ */
+function shotClose(t, u) {
+  const z = lerp(1.30, 0.86, easeInOut(u));
+  const cx = DW / 2 + u * 20, cy = DH / 2 + 20 - u * 30;
+  setCamera({ x: cx, y: cy, z, rot: -0.02 + u * 0.035 });
+  curDetail = 1;
+
+  hx.wash([[150, 200], [400, 140], [470, 360], [180, 410]], { color: '#c3d19c', a: 0.05, layers: 2, jitter: 55, seed: 701 });
+  hx.wash([[DW - 400, 105], [DW - 150, 80], [DW - 130, 300], [DW - 380, 330]], { color: '#c3d19c', a: 0.045, layers: 2, jitter: 55, seed: 704 });
+  drawLeaf(185, 715, 100, -0.3, { seed: 702 });
+  drawTendril(DW - 205, 205, 110, 2.6, { seed: 703 });
+
+  const R = 330;
+  drawMelon(cx, cy, R, { t, seed: 711, phase: -0.2, stripes: 10 });
+
+  // 缺口：用纸色挖掉一块，露出果肉
+  const notchA = -0.62, notchR = R * 0.46;
+  const notchC = [cx + Math.cos(notchA) * R * 0.60, cy + Math.sin(notchA) * R * 0.60 - 34];
+  const reveal = seg(t, 0.2, 1.6, easeOut);
+  const R2 = makeRng(721);
+  const bite = [];
+  const BN = 22;
+  for (let i = 0; i <= BN; i++) {
+    const a = (i / BN) * TAU;
+    const rr2 = notchR * reveal * (0.85 + noise3(Math.cos(a) * 2, Math.sin(a) * 2, 3.3) * 0.45);
+    bite.push([notchC[0] + Math.cos(a) * rr2, notchC[1] + Math.sin(a) * rr2 * 0.9]);
+  }
+  // 只在墨线阶段用纸色挖掉（盖住纸层的瓜皮与部分墨线）
+  if (PH.ink) {
+    ctxScene.save();
+    ctxScene.globalCompositeOperation = 'source-over';
+    ctxScene.globalAlpha = 1;
+    ctxScene.fillStyle = '#faf7ee';
+    hx.path(bite); ctxScene.fill();
+    ctxScene.restore();
+  }
+
+  if (reveal > 0.05) {
+    {
+    // 露出的果肉
+    const inner = bite.map((p, i) => {
+      const a = Math.atan2(p[1] - notchC[1], p[0] - notchC[0]);
+      return [notchC[0] + Math.cos(a) * notchR * reveal * 0.82, notchC[1] + Math.sin(a) * notchR * reveal * 0.78];
+    });
+    hx.wash(inner, { color: '#f6fad9', a: 0.30, layers: 4, jitter: 8, seed: 731 });
+    hx.wash(inner.map((p) => {
+      const a = Math.atan2(p[1] - notchC[1], p[0] - notchC[0]);
+      return [notchC[0] + Math.cos(a) * notchR * reveal * 0.74, notchC[1] + Math.sin(a) * notchR * reveal * 0.70];
+    }), { color: '#e04059', a: 0.26, layers: 6, jitter: 6, seed: 732 });
+    hx.wash(inner.map((p) => {
+      const a = Math.atan2(p[1] - notchC[1], p[0] - notchC[0]);
+      return [notchC[0] + Math.cos(a) * notchR * reveal * 0.58, notchC[1] + Math.sin(a) * notchR * reveal * 0.54];
+    }), { color: '#d93a52', a: 0.22, layers: 4, jitter: 5, seed: 735 });
+    }
+    // 缺口轮廓 + 籽
+    hx.poly(bite, { ink: '#4a6330', w: 3.6, a: 0.75, passes: 2, jitter: 3, seed: 733 });
+    for (let i = 0; i < 6; i++) {
+      const a = R2() * TAU, d = R2() * notchR * 0.5 * reveal;
+      const sx = notchC[0] + Math.cos(a) * d, sy = notchC[1] + Math.sin(a) * d * 0.85;
+      ctxScene.save(); ctxScene.translate(sx, sy); ctxScene.rotate(R2() * TAU);
+      hx.poly(ellipsePts(0, 0, 17, 9, 10, 0, 1), { ink: MELON.seed, w: 1.6, a: 0.8, passes: 2, jitter: 1.4, seed: 740 + i });
+      ctxScene.save(); ctxScene.globalAlpha = 0.85; ctxScene.fillStyle = '#241f18';
+      ctxScene.beginPath(); ctxScene.ellipse(0, 0, 13, 6.5, 0, 0, TAU); ctxScene.fill(); ctxScene.restore();
+      ctxScene.restore();
+    }
+  }
+
+  // 瓜面上的蚂蚁队伍（小剪影）
+  for (let i = 0; i < 5; i++) {
+    const a = -1.9 + i * 0.42 + Math.sin(t * 0.4 + i) * 0.03;
+    const pp = [cx + Math.cos(a) * R * 0.99, cy + Math.sin(a) * R * 0.99 * 0.94];
+    const ang = a + Math.PI / 2;
+    drawAntTiny(pp[0], pp[1], ang, 15, { alpha: 0.9, seed: 750 + i });
+  }
+  // 边缘一只正在缺口边张望
+  const wa = -0.55;
+  drawAnt(cx + Math.cos(wa) * R * 1.0, cy + Math.sin(wa) * R * 1.0 * 0.94, wa + Math.PI / 2, 26, {
+    t: t * 1.5, seed: 760, ink: '#1c1a16', alpha: 1, detail: 1,
+  });
+}
+
+/* ---------- 后处理：颗粒 / 暗角 / 页边 ---------- */
+function postProcess(t) {
+  ctxOut.setTransform(1, 0, 0, 1, 0, 0);
+  ctxOut.globalCompositeOperation = 'source-over';
+  ctxOut.globalAlpha = 1;
+  // 1) 静态纸纹
+  ctxOut.drawImage(cvPaperTex, 0, 0, DW, DH, 0, 0, OUTW, OUTH);
+  // 2) 纸层上的水彩（multiply 叠色）
+  ctxOut.globalCompositeOperation = 'multiply';
+  ctxOut.drawImage(cvPaper, 0, 0, DW, DH, 0, 0, OUTW, OUTH);
+  ctxOut.globalCompositeOperation = 'source-over';
+
+  // 3) 墨线层：先被纸的牙口吃掉一部分 → 干笔飞白
+  ctxScene.globalCompositeOperation = 'destination-in';
+  ctxScene.globalAlpha = 1;
+  const pat = ctxScene.createPattern(cvTooth, 'repeat');
+  ctxScene.fillStyle = pat;
+  ctxScene.fillRect(0, 0, DW, DH);
+  ctxScene.globalCompositeOperation = 'source-over';
+
+  ctxOut.drawImage(cvScene, 0, 0, DW, DH, 0, 0, OUTW, OUTH);
+
+  // 纸纹覆盖（轻微，统一质感）
+  ctxOut.globalCompositeOperation = 'overlay';
+  ctxOut.globalAlpha = 0.10;
+  ctxOut.drawImage(cvTooth, 0, 0, DW, DH, 0, 0, OUTW, OUTH);
+  ctxOut.globalCompositeOperation = 'source-over';
+
+  // 每帧跳动的颗粒（手绘动画的"呼吸"）
+  const gi = (Math.floor(t * FPS) % 4);
+  ctxOut.globalAlpha = 0.055;
+  ctxOut.drawImage(cvGrain, -gi * 37, -gi * 53, DW, DH, 0, 0, OUTW, OUTH);
+  ctxOut.globalAlpha = 1;
+
+  // 文字
+  ctxOut.drawImage(cvText, 0, 0, OUTW, OUTH);
+
+  // 页边杂物
+  ctxOut.globalCompositeOperation = 'multiply';
+  ctxOut.drawImage(cvFX, 0, 0, DW, DH, 0, 0, OUTW, OUTH);
+  ctxOut.globalCompositeOperation = 'source-over';
+
+  // 暗角
+  const g = ctxOut.createRadialGradient(OUTW / 2, OUTH / 2, OUTH * 0.34, OUTW / 2, OUTH / 2, OUTH * 0.95);
+  g.addColorStop(0, 'rgba(60,52,38,0)');
+  g.addColorStop(1, 'rgba(60,52,38,0.20)');
+  ctxOut.globalCompositeOperation = 'multiply';
+  ctxOut.fillStyle = g;
+  ctxOut.fillRect(0, 0, OUTW, OUTH);
+  ctxOut.globalCompositeOperation = 'source-over';
+}
+
+/* ---------- 单帧渲染 ---------- */
+function renderFrame(frame) {
+  const t = frame / FPS;
+  curT = t;
+  seedFrame(1000 + frame * 131);
+
+  setCamera({ x: DW / 2, y: DH / 2, z: 1, rot: 0 });
+  ctxPaper.setTransform(1, 0, 0, 1, 0, 0);
+  ctxPaper.globalAlpha = 1; ctxPaper.globalCompositeOperation = 'source-over';
+  ctxPaper.clearRect(0, 0, DW, DH);
+  ctxPaper.drawImage(cvPaperTex, 0, 0);
+  ctxScene.setTransform(1, 0, 0, 1, 0, 0);
+  ctxScene.globalAlpha = 1; ctxScene.globalCompositeOperation = 'source-over';
+  ctxScene.clearRect(0, 0, DW, DH);
+  hx.setCtx(ctxScene, 1);
+
+  const { s, u } = shotOf(t);
+  // 淡入淡出
+  const fadeIn = seg(t, 0, 0.7, easeOut), fadeOut = 1 - seg(t, TOTAL_S - 0.9, TOTAL_S, easeIn);
+  const fade = Math.min(fadeIn, fadeOut);
+  // 分镜之间的闪白（模拟手绘换页）
+  let flash = 0;
+  for (let i = 1; i < SHOTS.length; i++) {
+    const tb = SHOTS[i].t0;
+    if (Math.abs(t - tb) < 0.24) flash = Math.max(flash, 1 - Math.abs(t - tb) / 0.24);
+  }
+
+  hx.setCtx(ctxPaper, 1);
+  ctxPaper.globalCompositeOperation = 'multiply';
+  paintShot((tt) => {
+    if (s.name === 'wide') shotWide(tt, u);
+    else if (s.name === 'macro') shotMacro(tt, u);
+    else if (s.name === 'limb') shotLimb(tt, u);
+    else if (s.name === 'caravan') shotCaravan(tt, u);
+    else shotClose(tt, u);
+  });
+  ctxPaper.globalCompositeOperation = 'source-over';
+
+  postProcess(t);
+  // 闪白
+  if (flash > 0.002) {
+    ctxOut.setTransform(1, 0, 0, 1, 0, 0);
+    ctxOut.globalCompositeOperation = 'source-over';
+    ctxOut.globalAlpha = Math.pow(flash, 1.5) * 0.80;
+    ctxOut.fillStyle = '#fdfbf3';
+    ctxOut.fillRect(0, 0, OUTW, OUTH);
+    ctxOut.globalAlpha = 1;
+  }
+  // 首尾淡入淡出（用纸色，含颗粒）
+  if (fade < 0.999) {
+    ctxOut.setTransform(1, 0, 0, 1, 0, 0);
+    ctxOut.globalCompositeOperation = 'source-over';
+    ctxOut.globalAlpha = 1 - fade;
+    ctxOut.drawImage(cvPaperTex, 0, 0, DW, DH, 0, 0, OUTW, OUTH);
+    ctxOut.globalAlpha = 1;
+  }
+}
+
+/* ---------- 初始化 / 导出接口 ---------- */
+function init(ow, oh) {
+  OUTW = ow; OUTH = oh;
+  SCALE = OUTW / DW;
+  const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+  cvOut = mk(OUTW, OUTH); ctxOut = cvOut.getContext('2d');
+  cvScene = mk(DW, DH); ctxScene = cvScene.getContext('2d');
+  cvPaper = mk(DW, DH); ctxPaper = cvPaper.getContext('2d');
+  ctxScene.lineJoin = 'round'; ctxScene.lineCap = 'round';
+  ctxPaper.lineJoin = 'round'; ctxPaper.lineCap = 'round';
+  bakeAll();
+  hx.setCtx(ctxScene, 1);
+}
+window.__READY__ = false;
+window.__render = function (frame) {
+  renderFrame(frame);
+  return cvOut.toDataURL('image/png');
+};
+window.__init = function (w, h) { init(w, h); window.__READY__ = true; return [OUTW, OUTH, TOTAL, TOTAL_S, FPS]; };
+
+
+init(1280, 720);
+const cv = document.getElementById('out');
+cv.replaceWith(cvOut); cvOut.id = 'out';
+cvOut.style.width = '100%'; cvOut.style.height = '100%';
+let raf = 0, t0 = performance.now();
+function loop(){
+  const now = (performance.now() - t0) / 1000;
+  renderFrame(Math.floor((now % TOTAL_S) * FPS));
+  raf = requestAnimationFrame(loop);
+}
+loop();
+window.__seek = (sec) => { t0 = performance.now() - sec * 1000; };
+window.__still = (frame) => { cancelAnimationFrame(raf); renderFrame(frame); return cvOut.toDataURL('image/png'); };
+window.__APP = { renderFrame, cvOut, TOTAL, TOTAL_S, FPS, DW, DH, init };
+
+})();
+</script>
+</body>
+</html>
